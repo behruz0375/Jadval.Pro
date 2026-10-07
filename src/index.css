@@ -1,0 +1,517 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===================== MAVZULAR (Themes) ===================== */
+/* Ranglar "R G B" uchligi ko'rinishida — Tailwind alpha uchun */
+
+:root,
+[data-theme='softgray'] {
+  --bg: 238 240 247;
+  --surface: 255 255 255;
+  --surface-2: 245 247 251;
+  --sidebar: 248 249 253;
+  --border: 223 227 238;
+  --text: 24 28 44;
+  --text-muted: 108 116 137;
+  --accent: 68 87 214;
+  --accent-fg: 255 255 255;
+  --ok: 22 160 110;
+  --warn: 214 158 38;
+  --danger: 226 74 92;
+}
+
+[data-theme='light'] {
+  --bg: 247 249 252;
+  --surface: 255 255 255;
+  --surface-2: 240 244 248;
+  --sidebar: 255 255 255;
+  --border: 226 232 240;
+  --text: 17 24 39;
+  --text-muted: 100 116 139;
+  --accent: 37 99 235;
+  --accent-fg: 255 255 255;
+  --ok: 22 163 74;
+  --warn: 202 138 4;
+  --danger: 220 38 38;
+}
+
+[data-theme='dark'] {
+  --bg: 16 18 27;
+  --surface: 23 26 38;
+  --surface-2: 31 35 50;
+  --sidebar: 19 22 33;
+  --border: 44 50 68;
+  --text: 226 230 241;
+  --text-muted: 148 156 178;
+  --accent: 124 137 255;
+  --accent-fg: 12 15 28;
+  --ok: 52 190 130;
+  --warn: 230 180 70;
+  --danger: 240 112 130;
+}
+
+[data-theme='midnight'] {
+  --bg: 13 20 38;
+  --surface: 20 29 52;
+  --surface-2: 28 40 68;
+  --sidebar: 16 24 44;
+  --border: 40 54 86;
+  --text: 219 229 248;
+  --text-muted: 140 158 192;
+  --accent: 99 162 255;
+  --accent-fg: 8 14 30;
+  --ok: 52 180 120;
+  --warn: 226 176 70;
+  --danger: 240 118 118;
+}
+
+[data-theme='blue'] {
+  --bg: 234 243 255;
+  --surface: 255 255 255;
+  --surface-2: 238 246 255;
+  --sidebar: 214 230 252;
+  --border: 189 214 246;
+  --text: 15 31 58;
+  --text-muted: 76 103 143;
+  --accent: 29 78 216;
+  --accent-fg: 255 255 255;
+  --ok: 22 163 74;
+  --warn: 202 138 4;
+  --danger: 220 38 38;
+}
+
+[data-theme='emerald'] {
+  --bg: 235 248 242;
+  --surface: 255 255 255;
+  --surface-2: 238 249 244;
+  --sidebar: 214 240 227;
+  --border: 183 221 203;
+  --text: 16 42 33;
+  --text-muted: 78 120 103;
+  --accent: 5 150 105;
+  --accent-fg: 255 255 255;
+  --ok: 16 150 90;
+  --warn: 202 138 4;
+  --danger: 220 38 38;
+}
+
+[data-theme='violet'] {
+  --bg: 244 241 254;
+  --surface: 255 255 255;
+  --surface-2: 246 243 255;
+  --sidebar: 230 224 252;
+  --border: 209 199 243;
+  --text: 32 24 58;
+  --text-muted: 108 98 140;
+  --accent: 124 58 237;
+  --accent-fg: 255 255 255;
+  --ok: 22 163 74;
+  --warn: 202 138 4;
+  --danger: 220 38 38;
+}
+
+[data-theme='contrast'] {
+  --bg: 255 255 255;
+  --surface: 255 255 255;
+  --surface-2: 238 238 238;
+  --sidebar: 255 255 255;
+  --border: 20 20 20;
+  --text: 0 0 0;
+  --text-muted: 55 55 55;
+  --accent: 0 0 0;
+  --accent-fg: 255 255 255;
+  --ok: 0 120 40;
+  --warn: 150 90 0;
+  --danger: 190 0 0;
+}
+
+/* ===================== Asosiy uslublar ===================== */
+@layer base {
+  * {
+    border-color: rgb(var(--border));
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-bg text-ink antialiased;
+    font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'ss01', 'cv01', 'cv11';
+    letter-spacing: -0.006em;
+    overflow: hidden;
+  }
+  /* Sarlavhalar — Sora display shrifti (JadvalPro Design System) */
+  h1,
+  h2,
+  h3,
+  h4,
+  .font-display {
+    font-family: 'Sora', 'Plus Jakarta Sans', system-ui, sans-serif;
+    letter-spacing: -0.02em;
+    font-weight: 700;
+  }
+  /* Raqamlar jadval/statistikada tekis turishi uchun */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--border));
+    border: 2px solid transparent;
+    border-radius: 8px;
+    background-clip: padding-box;
+    transition: background-color 0.2s ease;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--accent) / 0.55);
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::selection {
+    background: rgb(var(--accent) / 0.25);
+  }
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent) / 0.6);
+    outline-offset: 2px;
+  }
+  tbody tr {
+    transition: background-color 0.16s ease, box-shadow 0.16s ease;
+  }
+}
+
+/* ===================== Komponent utilitalari ===================== */
+@layer components {
+  .card {
+    @apply bg-surface border border-border rounded-xl;
+    box-shadow:
+      0 1px 2px rgb(20 28 50 / 0.04),
+      0 8px 24px rgb(20 28 50 / 0.07);
+    transition:
+      transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.3s ease,
+      border-color 0.3s ease,
+      background-color 0.3s ease;
+  }
+  .card:hover {
+    border-color: rgb(var(--accent) / 0.35);
+    box-shadow:
+      0 1px 2px rgb(20 28 50 / 0.05),
+      0 14px 36px rgb(var(--accent) / 0.14);
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium select-none;
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    transition:
+      transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+      background-color 0.2s ease,
+      background-position 0.45s ease,
+      color 0.2s ease,
+      box-shadow 0.25s ease,
+      border-color 0.2s ease,
+      filter 0.2s ease;
+  }
+  /* Yorug'lik "sheen" effekti — hoverda chapdan o'ngga suziladi */
+  .btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(
+      105deg,
+      transparent 38%,
+      rgb(255 255 255 / 0.28) 50%,
+      transparent 62%
+    );
+    transform: translateX(-130%) skewX(-15deg);
+    pointer-events: none;
+  }
+  .btn:hover::after {
+    transform: translateX(130%) skewX(-15deg);
+    transition: transform 0.65s ease;
+  }
+  .btn:active {
+    transform: scale(0.96);
+  }
+  .btn-accent {
+    @apply text-accent-fg;
+    background-image: linear-gradient(
+      135deg,
+      rgb(var(--accent)) 0%,
+      color-mix(in srgb, rgb(var(--accent)) 72%, white) 52%,
+      rgb(var(--accent)) 100%
+    );
+    background-size: 200% auto;
+    box-shadow: 0 2px 10px rgb(var(--accent) / 0.25);
+  }
+  .btn-accent:hover {
+    background-position: right center;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgb(var(--accent) / 0.4);
+  }
+  .btn-ghost {
+    @apply text-ink;
+  }
+  .btn-ghost:hover {
+    background: rgb(var(--accent) / 0.1);
+    color: rgb(var(--accent));
+  }
+  .btn-outline {
+    @apply border border-border text-ink;
+  }
+  .btn-outline:hover {
+    border-color: rgb(var(--accent) / 0.55);
+    background: rgb(var(--accent) / 0.08);
+    color: rgb(var(--accent));
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgb(var(--accent) / 0.15);
+  }
+  .btn-danger {
+    @apply text-white;
+    background-image: linear-gradient(
+      135deg,
+      rgb(var(--danger)) 0%,
+      color-mix(in srgb, rgb(var(--danger)) 72%, white) 52%,
+      rgb(var(--danger)) 100%
+    );
+    background-size: 200% auto;
+    box-shadow: 0 2px 10px rgb(var(--danger) / 0.25);
+  }
+  .btn-danger:hover {
+    background-position: right center;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgb(var(--danger) / 0.4);
+  }
+  /* text-danger bilan ishlatilgan ghost/outline tugmalar hoverda qizilligicha qoladi */
+  .btn-ghost.text-danger:hover {
+    background: rgb(var(--danger) / 0.1);
+    color: rgb(var(--danger));
+  }
+  .btn-outline.text-danger:hover {
+    border-color: rgb(var(--danger) / 0.55);
+    background: rgb(var(--danger) / 0.08);
+    color: rgb(var(--danger));
+    box-shadow: 0 6px 18px rgb(var(--danger) / 0.15);
+  }
+  .btn:disabled {
+    transform: none;
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+  .btn:disabled::after {
+    display: none;
+  }
+  .input {
+    @apply w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink outline-none
+      placeholder:text-muted;
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.25s ease,
+      background-color 0.2s ease;
+  }
+  .input:hover {
+    border-color: rgb(var(--accent) / 0.45);
+  }
+  .input:focus {
+    border-color: rgb(var(--accent));
+    box-shadow:
+      0 0 0 4px rgb(var(--accent) / 0.15),
+      0 4px 14px rgb(var(--accent) / 0.12);
+  }
+  .label {
+    @apply text-sm font-medium text-ink;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-medium text-muted;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  }
+  .chip:hover {
+    background: rgb(var(--accent) / 0.12);
+    color: rgb(var(--accent));
+  }
+
+  /* Yon panel tugmalari */
+  .side-btn {
+    position: relative;
+    transition:
+      background-color 0.2s ease,
+      color 0.2s ease,
+      transform 0.2s ease;
+  }
+  .side-btn svg {
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .side-btn:hover svg {
+    transform: translateY(-2px) scale(1.15);
+  }
+  .side-btn:active svg {
+    transform: scale(0.92);
+  }
+  .side-btn-active::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    height: 60%;
+    width: 3px;
+    border-radius: 999px;
+    background: rgb(var(--accent));
+    transform: translateY(-50%);
+    animation: barIn 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+@keyframes barIn {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: 60%;
+    opacity: 1;
+  }
+}
+
+/* Masshtab animatsiyasi */
+.fade-in {
+  animation: fadeIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Modal paydo bo'lishi — yumshoq "pop" */
+.modal-pop {
+  animation: modalPop 0.32s cubic-bezier(0.22, 1.4, 0.36, 1);
+}
+@keyframes modalPop {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Toast — o'ngdan prujinali kirish */
+.toast-in {
+  animation: toastIn 0.38s cubic-bezier(0.22, 1.4, 0.36, 1);
+}
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateX(40px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+/* ===================== Landing animatsiyalari ===================== */
+@keyframes floatA {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(24px, -36px) scale(1.08); }
+}
+@keyframes floatB {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-30px, 26px) scale(1.12); }
+}
+@keyframes floatC {
+  0%, 100% { transform: translate(0, 0); }
+  33% { transform: translate(18px, 20px); }
+  66% { transform: translate(-20px, 12px); }
+}
+@keyframes gradientPan {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(26px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes bounceSoft {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+@keyframes spinSlow {
+  to { transform: rotate(360deg); }
+}
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--accent) / 0.45); }
+  50% { box-shadow: 0 0 0 14px rgb(var(--accent) / 0); }
+}
+
+.blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(64px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.animate-floatA { animation: floatA 12s ease-in-out infinite; }
+.animate-floatB { animation: floatB 17s ease-in-out infinite; }
+.animate-floatC { animation: floatC 14s ease-in-out infinite; }
+.animate-bounce-soft { animation: bounceSoft 3.2s ease-in-out infinite; }
+.animate-spin-slow { animation: spinSlow 26s linear infinite; }
+.animate-glow { animation: pulseGlow 2.6s ease-out infinite; }
+.anim-rise { opacity: 0; animation: riseIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+.hover-lift {
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.28s ease, border-color 0.28s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-8px);
+}
+.hover-lift.card:hover {
+  box-shadow:
+    0 4px 8px rgb(0 0 0 / 0.05),
+    0 18px 44px rgb(var(--accent) / 0.18);
+}
+
+.text-gradient {
+  background: linear-gradient(110deg, rgb(var(--accent)), rgb(var(--accent) / 0.55), rgb(var(--accent)));
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradientPan 6s ease infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-floatA, .animate-floatB, .animate-floatC, .animate-bounce-soft,
+  .animate-spin-slow, .animate-glow, .text-gradient,
+  .modal-pop, .toast-in, .fade-in { animation: none; }
+  .anim-rise { opacity: 1; animation: none; }
+  .btn::after { display: none; }
+  .btn, .card, .hover-lift, .side-btn, .side-btn svg, .input { transition: none; }
+}
+
+/* ===================== Chop etish (print) ===================== */
+@media print {
+  .no-print { display: none !important; }
+  html, body, #root { height: auto !important; overflow: visible !important; }
+  body { background: #fff !important; }
+  .print-area { overflow: visible !important; }
+  .print-break { break-after: page; page-break-after: always; }
+  @page { margin: 12mm; }
+}
