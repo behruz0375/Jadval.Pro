@@ -7,6 +7,14 @@ import { ChooseRole, type PickRole } from './ChooseRole'
 import { LandingPage } from '@/features/landing/LandingPage'
 import { TeacherPortal, StudentPortal } from '@/features/timetable/PortalPages'
 import { createBackup } from '@/io/backup'
+import { APP_VERSION, FILE_VERSION } from '@/constants'
+import {
+  isCloudSignedIn,
+  isAutoSyncEnabled,
+  uploadSnapshot,
+  getLastSyncAt,
+  getStoredUser,
+} from '@/features/cloud/api'
 
 /**
  * JadvalPro'ning soddalashtirilgan auth oqimi:
@@ -27,13 +35,31 @@ export function AuthGate() {
 
   // Avtomatik rezerv nusxa — har 10 daqiqada loyihani fon rejimida saqlaydi.
   // Faqat tizimga kirgan foydalanuvchilarga, bo'sh loyihaga tegmaydi.
+  // Bulut ulangan va direktor hisobi uchun — har 10 daqiqada bulutga ham yuboradi.
   useEffect(() => {
     if (!role || role === 'teacher' || role === 'student') return
     const tick = async () => {
+      const project = useProject.getState().project
       try {
-        await createBackup(useProject.getState().project, 'auto-10m')
+        await createBackup(project, 'auto-10m')
       } catch {
         /* IndexedDB to'lgan yoki tiqilgan — jim o'tkazamiz */
+      }
+      // Bulutga ham, agar sozlangan + yoqilgan + direktor
+      try {
+        if (!isCloudSignedIn() || !isAutoSyncEnabled()) return
+        const cu = getStoredUser()
+        if (!cu?.school_id) return
+        // Oldingi yuborilganidan beri 9 daqiqadan kam o'tgan bo'lsa — o'tkazib yuboramiz
+        const last = getLastSyncAt() ?? 0
+        if (Date.now() - last < 9 * 60 * 1000) return
+        const payload = {
+          ...project,
+          meta: { appVersion: APP_VERSION, savedAt: new Date().toISOString(), fileVersion: FILE_VERSION },
+        }
+        await uploadSnapshot(`Auto · ${new Date().toLocaleString()}`, payload)
+      } catch {
+        /* bulut yetib bormasa jim o'tkazamiz */
       }
     }
     const id = setInterval(tick, 10 * 60 * 1000) // 10 daqiqa

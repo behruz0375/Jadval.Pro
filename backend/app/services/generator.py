@@ -12,14 +12,17 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+Id = Any  # int or str — generator is ID-agnostic
+
+
 @dataclass
 class _Session:
     id: str
-    lesson_id: int
-    class_ids: list[int]
-    subject_id: int
-    teacher_id: int
-    room_id: int | None
+    lesson_id: Id
+    class_ids: list[Id]
+    subject_id: Id
+    teacher_id: Id
+    room_id: Id | None
     length: int = 1
     max_per_day: int = 0
 
@@ -27,12 +30,12 @@ class _Session:
 @dataclass
 class _State:
     # (class_id, day, period) -> session_id
-    class_slots: dict[tuple[int, int, int], str] = field(default_factory=dict)
-    teacher_slots: dict[tuple[int, int, int], str] = field(default_factory=dict)
-    room_slots: dict[tuple[int, int, int], str] = field(default_factory=dict)
-    teacher_day_count: dict[tuple[int, int], int] = field(default_factory=dict)
-    teacher_week_count: dict[int, int] = field(default_factory=dict)
-    class_lesson_day_count: dict[tuple[int, int, int], int] = field(default_factory=dict)
+    class_slots: dict[tuple[Id, int, int], str] = field(default_factory=dict)
+    teacher_slots: dict[tuple[Id, int, int], str] = field(default_factory=dict)
+    room_slots: dict[tuple[Id, int, int], str] = field(default_factory=dict)
+    teacher_day_count: dict[tuple[Id, int], int] = field(default_factory=dict)
+    teacher_week_count: dict[Id, int] = field(default_factory=dict)
+    class_lesson_day_count: dict[tuple[Id, int, Id], int] = field(default_factory=dict)
     entries: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -76,10 +79,10 @@ def generate_timetable(
     days_per_week = int(school.get("daysPerWeek") or school.get("days_per_week") or 6)
     periods_per_day = int(school.get("maxLessonsPerDay") or school.get("max_lessons_per_day") or 8)
 
-    classes = {int(c["id"]): c for c in project.get("classes", [])}
-    subjects = {int(s["id"]): s for s in project.get("subjects", [])}
-    teachers = {int(t["id"]): t for t in project.get("teachers", [])}
-    rooms = {int(r["id"]): r for r in project.get("rooms", [])}
+    classes = {c["id"]: c for c in project.get("classes", [])}
+    subjects = {s["id"]: s for s in project.get("subjects", [])}
+    teachers = {t["id"]: t for t in project.get("teachers", [])}
+    rooms = {r["id"]: r for r in project.get("rooms", [])}
     lessons = project.get("lessons", [])
 
     # Build sessions (each hour becomes one 1-hour session; could split into 2-hour pairs)
@@ -93,17 +96,20 @@ def generate_timetable(
                 class_ids = json.loads(class_ids)
             except Exception:
                 class_ids = []
-        class_ids = [int(x) for x in class_ids]
+        # Frontend might use string IDs (e.g. "c_1", "t_2") or int — both are fine.
+        teacher_id = lesson.get("teacherId") or lesson.get("teacher_id") or lesson.get("teacher1Id")
+        subject_id = lesson.get("subjectId") or lesson.get("subject_id")
+        room_id = lesson.get("roomId") or lesson.get("room_id")
         hours = int(round(float(lesson.get("hoursPerWeek") or lesson.get("hours_per_week") or 1)))
         for h in range(hours):
             sessions.append(
                 _Session(
                     id=f"L{lesson['id']}-h{h}",
-                    lesson_id=int(lesson["id"]),
-                    class_ids=class_ids,
-                    subject_id=int(lesson.get("subjectId") or lesson.get("subject_id")),
-                    teacher_id=int(lesson.get("teacherId") or lesson.get("teacher_id")),
-                    room_id=lesson.get("roomId") or lesson.get("room_id"),
+                    lesson_id=lesson["id"],
+                    class_ids=list(class_ids),
+                    subject_id=subject_id,
+                    teacher_id=teacher_id,
+                    room_id=room_id,
                     length=1,
                     max_per_day=int(lesson.get("maxPerDay") or lesson.get("max_per_day") or 0),
                 )
@@ -174,7 +180,7 @@ def generate_timetable(
                             continue
                         if not _is_available(room.get("availability_json") or room.get("availabilityJson"), day, period):
                             continue
-                        chosen_room = int(room["id"])
+                        chosen_room = room["id"]
                     else:
                         # pick any free room
                         for rid, rroom in rooms.items():

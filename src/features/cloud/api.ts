@@ -4,6 +4,8 @@
 const LS_URL = 'jadvalpro-cloud-url'
 const LS_TOKEN = 'jadvalpro-cloud-token'
 const LS_USER = 'jadvalpro-cloud-user'
+const LS_LAST_SYNC = 'jadvalpro-cloud-last-sync'
+const LS_AUTOSYNC = 'jadvalpro-cloud-autosync'
 
 export interface CloudUser {
   id: number
@@ -81,6 +83,34 @@ export function isCloudSignedIn(): boolean {
   return Boolean(getToken() && getStoredUser())
 }
 
+export function getLastSyncAt(): number | null {
+  const v = localStorage.getItem(LS_LAST_SYNC)
+  if (!v) return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+export function setLastSyncAt(ts: number | null): void {
+  if (ts) localStorage.setItem(LS_LAST_SYNC, String(ts))
+  else localStorage.removeItem(LS_LAST_SYNC)
+  // notify same-tab listeners (storage event only fires cross-tab)
+  try {
+    window.dispatchEvent(new CustomEvent('jadvalpro-cloud-sync', { detail: ts }))
+  } catch {
+    /* no-op */
+  }
+}
+
+export function isAutoSyncEnabled(): boolean {
+  // Enabled by default when cloud is signed in; user can disable in Settings.
+  const raw = localStorage.getItem(LS_AUTOSYNC)
+  return raw === null ? true : raw === '1'
+}
+
+export function setAutoSyncEnabled(on: boolean): void {
+  localStorage.setItem(LS_AUTOSYNC, on ? '1' : '0')
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const base = getCloudUrl()
   if (!base) throw new Error('Bulut server URL kiritilmagan')
@@ -153,11 +183,14 @@ export async function health(): Promise<{ status: string; service: string; versi
 
 export const listSnapshots = () => request<CloudSnapshot[]>('/api/sync/snapshots')
 
-export const uploadSnapshot = (label: string, data: unknown) =>
-  request<CloudSnapshot>('/api/sync/snapshots', {
+export const uploadSnapshot = async (label: string, data: unknown): Promise<CloudSnapshot> => {
+  const res = await request<CloudSnapshot>('/api/sync/snapshots', {
     method: 'POST',
     body: JSON.stringify({ label, data }),
   })
+  setLastSyncAt(Date.now())
+  return res
+}
 
 export const downloadSnapshot = (id: number) =>
   request<Record<string, unknown>>(`/api/sync/snapshots/${id}/raw`)
@@ -178,6 +211,18 @@ export const getJob = (jobId: string) =>
 
 export const cancelJob = (jobId: string) =>
   request<GenerationJob>(`/api/generator/jobs/${jobId}/cancel`, { method: 'POST' })
+
+export interface DirectGenResult {
+  entries: Array<Record<string, unknown>>
+  stats: { placed: number; totalSessions: number; unplaced: number; seed: number }
+  seed: number | null
+}
+
+export const generateDirect = (project: unknown, options: Record<string, unknown> = {}) =>
+  request<DirectGenResult>('/api/generator/run-direct', {
+    method: 'POST',
+    body: JSON.stringify({ project, options }),
+  })
 
 // --- Customers (admin) ---
 

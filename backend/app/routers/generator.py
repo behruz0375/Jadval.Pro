@@ -19,8 +19,21 @@ from ..models import (
     Teacher,
     Timetable,
 )
+from pydantic import BaseModel
+
 from ..schemas import GenerateIn, GenerationJobOut
 from ..services.generator import generate_timetable
+
+
+class _DirectIn(BaseModel):
+    project: dict
+    options: dict | None = None
+
+
+class _DirectOut(BaseModel):
+    entries: list[dict]
+    stats: dict
+    seed: int | None = None
 
 router = APIRouter(prefix="/api/generator", tags=["generator"], dependencies=[Depends(require_role("director", "deputy", "owner"))])
 
@@ -203,3 +216,18 @@ def cancel_job(job_id: str, school_id: SchoolId, db: DbSession):
 def list_jobs(school_id: SchoolId, db: DbSession):
     stmt = select(GenerationJob).where(GenerationJob.school_id == school_id).order_by(GenerationJob.created_at.desc()).limit(50)
     return list(db.execute(stmt).scalars().all())
+
+
+@router.post("/run-direct", response_model=_DirectOut)
+def run_direct(data: _DirectIn) -> _DirectOut:
+    """Sinxron ravishda frontend yuborgan Project JSON ga qarab jadval tuzadi.
+
+    Katta loyihalar uchun /start (background task) foydalaning. Bu endpoint
+    kichik va o'rta loyihalar uchun (brauzerni muzlatmasligi uchun web worker
+    o'rniga serverda tuzish variantini beradi).
+    """
+    try:
+        result = generate_timetable(data.project, data.options or {})
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Generator xatosi: {e}")
+    return _DirectOut(**result)

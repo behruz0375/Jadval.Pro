@@ -7,10 +7,11 @@ import { TimetableViewer } from './TimetableViewer'
 import { TimetableBoard } from './TimetableBoard'
 import { MasterGrid } from './MasterGrid'
 import { ImportDialog } from '@/features/import/ImportDialog'
-import { GenerationOptionsDialog } from './GenerationOptionsDialog'
-import type { GenerateOptions } from '@/engine/generate'
-import type { TimetableVersion } from '@/types'
+import { GenerationOptionsDialog, type GenerateOptionsExt } from './GenerationOptionsDialog'
+import type { TimetableVersion, TimetableEntry } from '@/types'
 import { cx, uid } from '@/utils'
+import { generateDirect } from '@/features/cloud/api'
+import { countHardViolations, timetableGaps } from '@/features/_shared/compute'
 
 export function DistributionPage() {
   const project = useProject((s) => s.project)
@@ -35,9 +36,63 @@ export function DistributionPage() {
     setOptsOpen(true)
   }
 
-  const runWith = (opts: GenerateOptions) => {
+  const runWith = async (opts: GenerateOptionsExt) => {
     setOptsOpen(false)
     const seed = opts.seed ?? Math.floor(Math.random() * 1e9)
+    // Serverda tuzish (ixtiyoriy — foydalanuvchi dialogdan tanlasa)
+    if (opts.useServerSide) {
+      toast.info('Serverda tuzilmoqda...')
+      try {
+        const { useServerSide: _ignore, ...serverOpts } = opts
+        void _ignore
+        const result = await generateDirect(project, { ...serverOpts, seed })
+        // Server entrysi: { classIds, teacherId, roomId, day (1..), period (1..), lessonId, length }
+        // Client formatida: { id, classId, teacherId, roomId, day (0..), slot (1..), lessonId }
+        // Multi-class darslar har bir sinf uchun bitta entry.
+        const entries: TimetableEntry[] = []
+        for (const [i, raw] of (result.entries as Array<Record<string, unknown>>).entries()) {
+          const classIds = (raw.classIds as string[] | undefined) ?? []
+          const day0 = Math.max(0, Number(raw.day ?? 1) - 1)
+          const slot = Number(raw.period ?? raw.slot ?? 1)
+          const teacherId = String(raw.teacherId ?? '')
+          const roomId = raw.roomId ? String(raw.roomId) : undefined
+          const lessonId = String(raw.lessonId ?? '')
+          for (const cid of classIds) {
+            entries.push({
+              id: uid('e_') + '_' + i,
+              classId: String(cid),
+              teacherId,
+              roomId,
+              day: day0,
+              slot,
+              lessonId,
+            })
+          }
+        }
+        const hard = countHardViolations(entries)
+        const gaps = timetableGaps(entries, project.teachers, project.school.workDays)
+        const v: TimetableVersion = {
+          id: uid('tt_'),
+          name: 'Server (' + new Date().toLocaleTimeString() + ')',
+          createdAt: new Date().toISOString(),
+          seed,
+          entries,
+          stats: {
+            placed: result.stats.placed,
+            unplaced: result.stats.unplaced,
+            hardViolations: hard,
+            teacherGaps: gaps.teacherGaps,
+            softPenalty: 0,
+          },
+        }
+        addTimetable(v)
+        setSelectedId(v.id)
+        toast.success(`Server: ${result.stats.placed}/${result.stats.totalSessions} joylashtirildi`)
+      } catch (e) {
+        toast.error('Server xatosi: ' + (e instanceof Error ? e.message : String(e)))
+      }
+      return
+    }
     run(
       project,
       { ...opts, seed },

@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react'
-import { Menu, Minus, Square, X, LogOut, Search, Send, Save } from 'lucide-react'
+import { Menu, Minus, Square, X, LogOut, Search, Send, Save, Cloud, CloudOff } from 'lucide-react'
 import { useUI } from '@/store/ui'
 import { useAuth } from '@/store/auth'
 import { useProject } from '@/store/project'
 import { useToast } from '@/store/toast'
-import { APP_VERSION } from '@/constants'
+import { APP_VERSION, FILE_VERSION } from '@/constants'
 import { cx, telegramUrl } from '@/utils'
 import { useT } from '@/i18n'
+import {
+  isCloudSignedIn,
+  getStoredUser,
+  getLastSyncAt,
+  uploadSnapshot,
+} from '@/features/cloud/api'
 
 export function TopBar() {
   const toggleSidebar = useUI((s) => s.toggleSidebar)
@@ -25,16 +31,54 @@ export function TopBar() {
     const id = setInterval(() => setTick((v) => v + 1), 30_000)
     return () => clearInterval(id)
   }, [])
-  const savedLabel = (() => {
-    void tick
-    if (!savedAt) return null
-    const mins = Math.floor((Date.now() - new Date(savedAt).getTime()) / 60_000)
+  const relativeTime = (ms: number | null | undefined) => {
+    if (!ms) return null
+    const mins = Math.floor((Date.now() - ms) / 60_000)
     if (mins < 1) return t('hozirgina')
     if (mins < 60) return `${mins} ${t('daqiqa oldin')}`
     const hours = Math.floor(mins / 60)
     if (hours < 24) return `${hours} ${t('soat oldin')}`
     return `${Math.floor(hours / 24)} ${t('kun oldin')}`
+  }
+
+  const savedLabel = (() => {
+    void tick
+    return savedAt ? relativeTime(new Date(savedAt).getTime()) : null
   })()
+
+  // Bulut sinxronizatsiya ko'rsatkichi
+  const [cloudTick, setCloudTick] = useState(0)
+  useEffect(() => {
+    const onSync = () => setCloudTick((v) => v + 1)
+    window.addEventListener('jadvalpro-cloud-sync', onSync)
+    return () => window.removeEventListener('jadvalpro-cloud-sync', onSync)
+  }, [])
+  const cloudReady = isCloudSignedIn() && Boolean(getStoredUser()?.school_id)
+  const cloudSyncLabel = (() => {
+    void cloudTick
+    void tick
+    if (!cloudReady) return null
+    return relativeTime(getLastSyncAt()) ?? t('hali yuborilmagan')
+  })()
+
+  const [cloudBusy, setCloudBusy] = useState(false)
+  const syncCloudNow = async () => {
+    if (cloudBusy) return
+    setCloudBusy(true)
+    try {
+      const project = useProject.getState().project
+      const payload = {
+        ...project,
+        meta: { appVersion: APP_VERSION, savedAt: new Date().toISOString(), fileVersion: FILE_VERSION },
+      }
+      await uploadSnapshot(`Qo'lda · ${new Date().toLocaleString()}`, payload)
+      toast.success(t('Bulutga yuborildi'))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setCloudBusy(false)
+    }
+  }
 
   const contactAdmin = () => {
     const url = telegramUrl(ownerContact.telegram)
@@ -96,6 +140,25 @@ export function TopBar() {
           >
             <Save size={12} />
             {dirty ? t("saqlanmagan") : savedLabel}
+          </span>
+        )}
+        {role !== 'teacher' && role !== 'student' && role !== 'owner' && cloudReady && (
+          <button
+            onClick={syncCloudNow}
+            disabled={cloudBusy}
+            className="hidden items-center gap-1 rounded-md bg-accent/10 px-2 py-0.5 text-xs text-accent transition-colors hover:bg-accent/20 disabled:opacity-50 lg:inline-flex"
+            title={`${t('Bulutga oxirgi yuborish')}: ${cloudSyncLabel} · ${t('Hozir yuborish uchun bosing')}`}
+          >
+            <Cloud size={12} />
+            {cloudSyncLabel}
+          </button>
+        )}
+        {role !== 'teacher' && role !== 'student' && role !== 'owner' && !cloudReady && isCloudSignedIn() && (
+          <span
+            className="hidden items-center gap-1 rounded-md bg-muted/10 px-2 py-0.5 text-xs text-muted lg:inline-flex"
+            title={t('Bulutga ulangan, lekin maktab yo‘q')}
+          >
+            <CloudOff size={12} />
           </span>
         )}
         {ownerContact.telegram && role !== 'owner' && (

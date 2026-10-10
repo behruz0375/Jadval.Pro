@@ -83,6 +83,14 @@ VITE_API_URL=http://localhost:8000
 
 Sozlamalar → "Bulut sinxronizatsiya" kartasidan server URL ni kiriting, login/parol bilan tizimga kiring.
 
+## Testlar
+
+```bash
+.venv/Scripts/python -m pytest tests/ -q
+```
+
+12 ta integratsiya test (auth, customers, entities, sync, generator) alohida sinov SQLite DB da ishlaydi.
+
 ## Deployment
 
 Production uchun:

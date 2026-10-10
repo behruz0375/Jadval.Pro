@@ -1,8 +1,13 @@
 import { useState } from 'react'
-import { Play, CalendarDays, UserMinus, DoorOpen, Repeat } from 'lucide-react'
+import { Play, CalendarDays, UserMinus, DoorOpen, Repeat, Cloud } from 'lucide-react'
 import { Modal } from '@/components/Modal'
 import { useT } from '@/i18n'
 import type { GenerateOptions } from '@/engine/generate'
+import { isCloudSignedIn } from '@/features/cloud/api'
+
+export interface GenerateOptionsExt extends GenerateOptions {
+  useServerSide?: boolean
+}
 
 const OPTS: { key: keyof GenerateOptions; label: string; icon: typeof CalendarDays }[] = [
   { key: 'spreadDays', label: 'Darslarni kunlarga tekis taqsimlash', icon: CalendarDays },
@@ -17,7 +22,7 @@ export function GenerationOptionsDialog({
 }: {
   open: boolean
   onClose: () => void
-  onStart: (opts: GenerateOptions) => void
+  onStart: (opts: GenerateOptionsExt) => void
 }) {
   const t = useT()
   const [flags, setFlags] = useState<Record<string, boolean>>({
@@ -28,6 +33,8 @@ export function GenerationOptionsDialog({
   const [seed, setSeed] = useState('')
   const [weights, setWeights] = useState({ gapWeight: 2, spreadWeight: 4, morningWeight: 2 })
   const [restarts, setRestarts] = useState(3)
+  const [useServerSide, setUseServerSide] = useState(false)
+  const cloudAvailable = isCloudSignedIn()
 
   const start = () => {
     const s = seed.trim() ? Number(seed.trim()) : undefined
@@ -36,7 +43,8 @@ export function GenerationOptionsDialog({
       ...weights,
       restarts,
       seed: Number.isFinite(s) ? s : undefined,
-    } as GenerateOptions)
+      useServerSide,
+    } as GenerateOptionsExt)
   }
 
   return (
@@ -83,6 +91,24 @@ export function GenerationOptionsDialog({
         <WeightSlider label={t('Fanlarni kunlarga tekis tarqatish')} value={weights.spreadWeight} onChange={(v) => setWeights((w) => ({ ...w, spreadWeight: v }))} />
         <WeightSlider label={t("Og'ir fanlarni ertalabga surish")} value={weights.morningWeight} onChange={(v) => setWeights((w) => ({ ...w, morningWeight: v }))} />
       </div>
+
+      {cloudAvailable && (
+        <label className="mt-3 flex cursor-pointer items-center gap-3 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2.5 transition-colors hover:bg-accent/10">
+          <input
+            type="checkbox"
+            checked={useServerSide}
+            onChange={(e) => setUseServerSide(e.target.checked)}
+            className="h-4 w-4 accent-accent"
+          />
+          <Cloud size={17} className="text-accent" />
+          <span className="min-w-0 flex-1 text-sm">
+            {t('Serverda tuzish')}
+            <span className="ml-2 text-[11px] text-muted">
+              {t('(brauzerni muzlatmaydi, bulut server kerak)')}
+            </span>
+          </span>
+        </label>
+      )}
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <div>
