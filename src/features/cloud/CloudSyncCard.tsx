@@ -6,6 +6,8 @@ import { useProject } from '@/store/project'
 import { APP_VERSION, FILE_VERSION } from '@/constants'
 import type { Project } from '@/types'
 import { defaultProject } from '@/data/factories'
+import { useIsPro } from '@/features/pro/tier'
+import { ProLockOverlay } from '@/features/pro/ProBadge'
 import {
   getCloudUrl,
   setCloudUrl,
@@ -30,6 +32,7 @@ export function CloudSyncCard() {
   const toast = useToast()
   const project = useProject((s) => s.project)
   const setProject = useProject((s) => s.setProject)
+  const isPro = useIsPro()
 
   const [url, setUrl] = useState(getCloudUrl())
   const [user, setUser] = useState<CloudUser | null>(getStoredUser())
@@ -183,6 +186,12 @@ export function CloudSyncCard() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
     }
+  }
+
+  if (!isPro) {
+    return (
+      <ProLockOverlay feature={t('Bulut sinxronizatsiya')} />
+    )
   }
 
   return (

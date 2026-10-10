@@ -24,6 +24,8 @@ import { useToast } from '@/store/toast'
 import { Field, TextField, SelectField } from '@/components/Field'
 import { Modal } from '@/components/Modal'
 import { cx } from '@/utils'
+import { generateProKey } from '@/features/pro/tier'
+import { ProBadge } from '@/features/pro/ProBadge'
 
 export function OwnerPanel() {
   const schools = useAuth((s) => s.schools)
@@ -43,7 +45,8 @@ export function OwnerPanel() {
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
   const [notes, setNotes] = useState('')
-  const [plan, setPlan] = useState('Standart')
+  const [plan, setPlan] = useState<'Free' | 'Pro'>('Free')
+  const [proKey, setProKey] = useState('')
   const [query, setQuery] = useState('')
   const [delId, setDelId] = useState<string | null>(null)
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
@@ -62,12 +65,14 @@ export function OwnerPanel() {
     if (!schoolName.trim()) return toast.error('Maktab nomini kiriting')
     if (!login.trim()) return toast.error('Login kiriting')
     if (!password.trim()) return toast.error('Parolni kiriting')
+    // Pro tanlangan va kalit yo'q bo'lsa — avto-generatsiya
+    const key = plan === 'Pro' ? (proKey.trim() || generateProKey()) : ''
     if (editId) {
-      updateCustomer(editId, { schoolName, director, phone, login, password, notes, plan })
+      updateCustomer(editId, { schoolName, director, phone, login, password, notes, plan, key })
       toast.success('Mijoz yangilandi')
     } else {
-      addCustomer({ schoolName, director, phone, login, password, notes, plan })
-      toast.success('Yangi mijoz saqlandi')
+      addCustomer({ schoolName, director, phone, login, password, notes, plan, key })
+      toast.success(plan === 'Pro' ? `Yangi Pro mijoz saqlandi. Kalit: ${key}` : 'Yangi mijoz saqlandi')
     }
     reset()
     setOpen(false)
@@ -83,7 +88,9 @@ export function OwnerPanel() {
     setLogin(s.login ?? '')
     setPassword(s.password ?? '')
     setNotes(s.notes ?? '')
-    setPlan(s.plan || 'Standart')
+    const planNorm = (s.plan === 'Pro' || s.plan === 'Premium') ? 'Pro' : 'Free'
+    setPlan(planNorm)
+    setProKey(s.key ?? '')
     setOpen(true)
   }
 
@@ -95,7 +102,8 @@ export function OwnerPanel() {
     setLogin('')
     setPassword('')
     setNotes('')
-    setPlan('Standart')
+    setPlan('Free')
+    setProKey('')
   }
 
   const toggleReveal = (id: string) => {
@@ -107,9 +115,13 @@ export function OwnerPanel() {
   }
 
   const sendCredentialsViaTelegram = (s: typeof schools[number]) => {
-    const msg = `Assalomu alaykum! JadvalPro dasturi uchun login/parolingiz:\n\nLogin: ${s.login}\nParol: ${s.password}\n\nDastur ichida Zavuch (direktor) sifatida kiring va shu ma'lumotlarni «Birinchi kirish» oynasiga kiriting.`
+    const isPro = (s.plan === 'Pro' || s.plan === 'Premium') && s.key
+    const proBlock = isPro
+      ? `\n\n🔑 PRO AKTIVATSIYA KALITI:\n${s.key}\n\nDastur Sozlamalar → Pro versiya kartasiga yozib "Aktivlash" bosing — barcha Pro imkoniyatlar ochiladi.`
+      : ''
+    const msg = `Assalomu alaykum! JadvalPro dasturi uchun login/parolingiz:\n\nLogin: ${s.login}\nParol: ${s.password}\n\nDastur ichida Zavuch (direktor) sifatida kiring va shu ma'lumotlarni «Birinchi kirish» oynasiga kiriting.${proBlock}`
     navigator.clipboard.writeText(msg).then(() => {
-      toast.success('Login va parol xabari nusxalandi — Telegramga joylang')
+      toast.success(isPro ? 'Login, parol va Pro kalit nusxalandi' : 'Login va parol xabari nusxalandi')
     }).catch(() => { /* ignore */ })
     const tg = ownerContact.telegram
     if (!tg) return
@@ -239,7 +251,10 @@ export function OwnerPanel() {
                       <Building2 size={20} />
                     </div>
                     <div>
-                      <div className="font-semibold leading-tight">{s.schoolName}</div>
+                      <div className="flex items-center gap-1.5 font-semibold leading-tight">
+                        {s.schoolName}
+                        {(s.plan === 'Pro' || s.plan === 'Premium') && <ProBadge size="xs" animated={false} />}
+                      </div>
                       {s.director && <div className="text-xs text-muted">{s.director}</div>}
                     </div>
                   </div>
@@ -253,6 +268,28 @@ export function OwnerPanel() {
                   <Info label="Telefon" value={s.phone || '—'} />
                   <Info label="Qo'shilgan" value={new Date(s.issuedAt).toLocaleDateString('uz')} />
                 </div>
+
+                {/* Pro kalit — faqat Pro mijozlar uchun */}
+                {(s.plan === 'Pro' || s.plan === 'Premium') && s.key && (
+                  <div className="rounded-lg border border-amber-300/40 bg-gradient-to-br from-amber-50 to-orange-50 p-2.5 text-xs dark:border-amber-500/20 dark:from-amber-900/15 dark:to-orange-900/15">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-semibold text-amber-900 dark:text-amber-200">Pro kalit</span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(s.key).catch(() => {})
+                          toast.success('Pro kalit nusxalandi')
+                        }}
+                        className="text-amber-700 hover:text-amber-900 dark:text-amber-300"
+                        title="Nusxa olish"
+                      >
+                        <Copy size={12} />
+                      </button>
+                    </div>
+                    <code className="block select-all break-all rounded bg-white/70 px-2 py-1 font-mono text-amber-950 dark:bg-black/20 dark:text-amber-100">
+                      {s.key}
+                    </code>
+                  </div>
+                )}
 
                 {/* Login va parol (mijozga berilgan) */}
                 <div className="space-y-1.5 rounded-lg border border-border bg-surface-2/60 p-2.5 text-xs">
@@ -341,13 +378,37 @@ export function OwnerPanel() {
             </div>
           </Field>
           <Field label="Tarif">
-            <SelectField value={plan} onChange={(e) => setPlan(e.target.value)}>
-              <option>Standart</option>
-              <option>Premium</option>
-              <option>Sinov</option>
+            <SelectField value={plan} onChange={(e) => {
+              const v = e.target.value as 'Free' | 'Pro'
+              setPlan(v)
+              if (v === 'Pro' && !proKey) setProKey(generateProKey())
+            }}>
+              <option value="Free">Free (bepul)</option>
+              <option value="Pro">Pro (to‘liq imkoniyatlar)</option>
             </SelectField>
           </Field>
-          <div className="hidden sm:block" />
+          {plan === 'Pro' ? (
+            <Field label="Pro aktivatsiya kaliti" hint="Mijoz Sozlamalar'da shuni kiritadi">
+              <div className="flex gap-2">
+                <TextField
+                  value={proKey}
+                  onChange={(e) => setProKey(e.target.value.toUpperCase())}
+                  placeholder="JPRO-XXXX-XXXX-XXXX"
+                  className="font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setProKey(generateProKey())}
+                  className="btn btn-outline"
+                  title="Yangi kalit"
+                >
+                  🎲
+                </button>
+              </div>
+            </Field>
+          ) : (
+            <div className="hidden sm:block" />
+          )}
           <Field label="Eslatma (ixtiyoriy)" className="sm:col-span-2" hint="To'lov miqdori, sana, boshqa izohlar">
             <TextField value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="2026-10-05: 500 000 so'm" />
           </Field>

@@ -13,6 +13,8 @@ import {
   getLastSyncAt,
   uploadSnapshot,
 } from '@/features/cloud/api'
+import { useTier } from '@/features/pro/tier'
+import { ProBadge } from '@/features/pro/ProBadge'
 
 export function TopBar() {
   const toggleSidebar = useUI((s) => s.toggleSidebar)
@@ -171,6 +173,7 @@ export function TopBar() {
             <span className="hidden sm:inline">{t('Adminga yozish')}</span>
           </button>
         )}
+        {role !== 'owner' && <ProChip />}
         <span className="chip hidden md:inline-flex">{label}</span>
         <button
           onClick={() => {
@@ -191,6 +194,31 @@ export function TopBar() {
         </div>
       </div>
     </header>
+  )
+}
+
+function ProChip() {
+  const tier = useTier()
+  const setActivePanel = useUI((s) => s.setActivePanel)
+  if (tier === 'pro') {
+    return (
+      <button
+        onClick={() => setActivePanel('settings')}
+        className="hidden md:inline-flex"
+        title="Pro versiya faol — Sozlamalarda ko'rish"
+      >
+        <ProBadge size="sm" />
+      </button>
+    )
+  }
+  return (
+    <button
+      onClick={() => setActivePanel('settings')}
+      className="hidden items-center gap-1 rounded-md border border-amber-400/40 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-200 md:inline-flex dark:bg-amber-900/30 dark:text-amber-200"
+      title="Pro aktivatsiya kalit kiriting"
+    >
+      ✨ Upgrade
+    </button>
   )
 }
 

@@ -515,6 +515,35 @@
   .btn, .card, .hover-lift, .side-btn, .side-btn svg, .input { transition: none; }
 }
 
+/* ===================== Pro badge shimmer ===================== */
+.pro-badge-shine {
+  position: relative;
+  overflow: hidden;
+}
+.pro-badge-shine::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 0%,
+    transparent 35%,
+    rgba(255, 255, 255, 0.5) 50%,
+    transparent 65%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: pro-shine 2.6s linear infinite;
+  pointer-events: none;
+}
+@keyframes pro-shine {
+  from { background-position: 200% 0; }
+  to { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pro-badge-shine::before { animation: none; opacity: 0; }
+}
+
 /* ===================== Chop etish (print) ===================== */
 @media print {
   .no-print { display: none !important; }

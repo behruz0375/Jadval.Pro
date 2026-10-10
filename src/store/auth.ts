@@ -156,6 +156,7 @@ interface AuthState {
     password: string
     notes?: string
     plan?: string
+    key?: string
   }) => void
   /** Mavjud mijoz yozuvini yangilash (shu jumladan admin bergan login/parol) */
   updateCustomer: (id: string, patch: Partial<SchoolRecord>) => void
@@ -584,8 +585,9 @@ export const useAuth = create<AuthState>()(
         set((s) => ({ schools: s.schools.map((x) => (x.licenseId === id ? { ...x, blocked } : x)) })),
       removeSchool: (id) => set((s) => ({ schools: s.schools.filter((x) => x.licenseId !== id) })),
 
-      /** Yangi mijoz yozuvi — litsenziya kaliti yaratilmaydi, faqat admin lokal eslatma */
-      addCustomer: ({ schoolName, director, phone, login, password, notes, plan }) => {
+      /** Yangi mijoz yozuvi — litsenziya kaliti yaratilmaydi, faqat admin lokal eslatma.
+       *  Pro kaliti (ixtiyoriy) `key` orqali uzatiladi — mijoz Sozlamalar'da aktivlashtiradi. */
+      addCustomer: ({ schoolName, director, phone, login, password, notes, plan, key }) => {
         const now = new Date()
         const rec: SchoolRecord = {
           licenseId: uid('CUS_'),
@@ -593,10 +595,10 @@ export const useAuth = create<AuthState>()(
           director,
           phone,
           machineCode: '',
-          plan: plan || 'Standart',
+          plan: plan || 'Free',
           issuedAt: now.toISOString(),
           expiresAt: now.toISOString(),
-          key: '',
+          key: key || '',
           blocked: false,
           login,
           password,
@@ -615,7 +617,21 @@ export const useAuth = create<AuthState>()(
         })),
       clearAudit: () => set({ audit: [] }),
       // Litsenziya tizimi olib tashlandi — hech qanday tarif cheklovi yo'q
-      planLimit: () => null,
+      planLimit: (kind) => {
+        // Pro tier module'dan limit o'qiymiz — moddiy cheklovlar (free: 10 sinf, 15 o'qituvchi)
+        try {
+          // Dynamic import required because tier.ts depends on React (useSyncExternalStore).
+          // We only need the pure getters here, so inline fallback.
+          const v = localStorage.getItem('jadvalpro-tier')
+          if (v === 'pro') return null
+          // Free limits — synced with FREE_LIMITS in src/features/pro/tier.ts
+          if (kind === 'classes') return 10
+          if (kind === 'teachers') return 15
+          return null
+        } catch {
+          return null
+        }
+      },
 
       roleLabel: () => {
         const r = get().role

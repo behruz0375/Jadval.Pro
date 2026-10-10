@@ -4,6 +4,8 @@ import { Modal } from '@/components/Modal'
 import { useT } from '@/i18n'
 import type { GenerateOptions } from '@/engine/generate'
 import { isCloudSignedIn } from '@/features/cloud/api'
+import { useIsPro } from '@/features/pro/tier'
+import { ProBadge } from '@/features/pro/ProBadge'
 
 export interface GenerateOptionsExt extends GenerateOptions {
   useServerSide?: boolean
@@ -34,7 +36,8 @@ export function GenerationOptionsDialog({
   const [weights, setWeights] = useState({ gapWeight: 2, spreadWeight: 4, morningWeight: 2 })
   const [restarts, setRestarts] = useState(3)
   const [useServerSide, setUseServerSide] = useState(false)
-  const cloudAvailable = isCloudSignedIn()
+  const isPro = useIsPro()
+  const cloudAvailable = isCloudSignedIn() && isPro
 
   const start = () => {
     const s = seed.trim() ? Number(seed.trim()) : undefined
@@ -107,6 +110,7 @@ export function GenerationOptionsDialog({
               {t('(brauzerni muzlatmaydi, bulut server kerak)')}
             </span>
           </span>
+          <ProBadge size="xs" animated={false} />
         </label>
       )}
 
