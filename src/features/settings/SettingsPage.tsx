@@ -18,6 +18,7 @@ import { cx } from '@/utils'
 import type { LucideIcon } from 'lucide-react'
 import { CloudSyncCard } from '@/features/cloud/CloudSyncCard'
 import { ProActivationCard } from '@/features/pro/ProActivationCard'
+import { DangerZoneCard } from './DangerZoneCard'
 
 const ACCENT_PRESETS = ['#4457d6', '#2563eb', '#059669', '#7c3aed', '#db2777', '#ea580c', '#0891b2', '#dc2626']
 
@@ -168,6 +169,9 @@ export function SettingsPage() {
 
       {/* Bulut sinxronizatsiya */}
       <CloudSyncCard />
+
+      {/* Ma'lumotlarni tozalash */}
+      <DangerZoneCard />
 
       {/* Dastur haqida */}
       <Section icon={Info} title={t('Dastur haqida')}>
