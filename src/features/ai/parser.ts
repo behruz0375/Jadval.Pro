@@ -253,6 +253,25 @@ function mBulkClasses(t: string): ParseResult | null {
   return null
 }
 
+/** Oddiy bulk: "11 ta sinf qo'sh", "30 ta o'qituvchi", "17 ta fan", "30 ta xona" */
+function mBulkSimple(t: string): ParseResult | null {
+  // "N ta <entity>" naqshi
+  const re = /(\d+)\s*(?:ta|шт|pcs?)?\s*(sinf|класс|class|fan|предмет|subject|o'?qituvchi|учител|teacher|xona|кабинет|room|audit)/i
+  const m = re.exec(t)
+  if (!m) return null
+  // "qo'sh/yarat/add" — ko'p holda bo'ladi; agar yo'q bo'lsa ham, raqam + entity bo'lsa — qo'shish deb qabul
+  const count = Number(m[1])
+  if (!Number.isFinite(count) || count < 1 || count > 200) return null
+  const token = m[2].toLowerCase()
+  let tool = ''
+  if (/sinf|класс|class/.test(token)) tool = 'bulk_add_classes_simple'
+  else if (/fan|предмет|subject/.test(token)) tool = 'bulk_add_subjects'
+  else if (/qituvchi|учител|teacher/.test(token)) tool = 'bulk_add_teachers'
+  else if (/xona|кабинет|room|audit/.test(token)) tool = 'bulk_add_rooms'
+  if (!tool) return null
+  return { type: 'tool', call: { name: tool, args: { count } } }
+}
+
 function mAdd(t: string): ParseResult | null {
   if (!/\b(yangi|qo'sh|qosh|yarat|добав|создай|add|create|new)\b/.test(t)) return null
   const { entity, rest } = findEntity(t)

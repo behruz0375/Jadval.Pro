@@ -119,12 +119,14 @@ export function validateProject(project: Project): ValidationResult {
       .filter((l) => l.teacher1Id === t.id || l.teacher2Id === t.id)
       .reduce((a, l) => a + l.hoursPerWeek, 0)
     if (t.weeklyMax > 0 && assigned > t.weeklyMax) {
+      // Generator weeklyMax'ni hurmat qiladi — ortiqcha dars joylashmay qoladi, lekin
+      // halokat emas. Shuning uchun bu — ogohlantirish, ERROR emas.
       issues.push({
-        severity: 'error',
+        severity: 'warning',
         entity: 'teacher',
         entityId: t.id,
-        message: `${t.fullName}ga ${assigned} soat biriktirilgan, lekin haftalik max — ${t.weeklyMax} soat (${assigned - t.weeklyMax} soat ortiqcha)`,
-        hint: `Darslar sonini kamaytiring yoki o‘qituvchining "Haftalik maksimum" ni ${assigned} ga oshiring`,
+        message: `${t.fullName}ga ${assigned} soat biriktirilgan, haftalik max — ${t.weeklyMax} soat (${assigned - t.weeklyMax} soat sig‘maydi)`,
+        hint: `O'qituvchining "Haftalik maksimum" ni ${assigned} ga oshiring, yoki shu dars boshqa o'qituvchiga biriktiring`,
       })
     }
     // Metodik kun availability'ni butunlay o'chirmayotgani
@@ -139,7 +141,7 @@ export function validateProject(project: Project): ValidationResult {
       })()
       if (assigned > availableSlots) {
         issues.push({
-          severity: 'error',
+          severity: 'warning',
           entity: 'teacher',
           entityId: t.id,
           message: `${t.fullName}: ${assigned} soat kerak, lekin faqat ${availableSlots} slot bo‘sh (metodik kun + ish vaqti grid'ini hisobga olib)`,
@@ -162,6 +164,7 @@ export function validateProject(project: Project): ValidationResult {
       return n
     })()
     if (needed > availableSlots) {
+      // Haqiqiy fizik imkonsizlik — bu error (slot yetmaydi)
       issues.push({
         severity: 'error',
         entity: 'class',
@@ -192,11 +195,12 @@ export function validateProject(project: Project): ValidationResult {
     0,
   )
   if (totalLessonHours > totalTeacherHours) {
+    // Umumiy sig'im yetmaydi — bu ham ogohlantirish (generator joylashishi mumkinini qiladi, qolgan qism unplaced)
     issues.push({
-      severity: 'error',
+      severity: 'warning',
       entity: 'project',
-      message: `Umumiy balans: ${totalLessonHours} soat kerak, lekin barcha o‘qituvchilar jami ${totalTeacherHours} soat (${totalLessonHours - totalTeacherHours} soat yetishmaydi)`,
-      hint: 'Yangi o‘qituvchi qo‘shing yoki mavjudlarning "Haftalik maksimum"ni oshiring',
+      message: `Umumiy balans: ${totalLessonHours} soat kerak, barcha o‘qituvchilar jami ${totalTeacherHours} soat (${totalLessonHours - totalTeacherHours} soat yetishmaydi)`,
+      hint: 'Yangi o‘qituvchi qo‘shing yoki mavjudlarning "Haftalik maksimum"ni oshiring. Generator joylash mumkin bo‘lgan qismini joylashtiradi.',
     })
   }
 

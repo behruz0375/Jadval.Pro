@@ -296,6 +296,151 @@ export const TOOLS: ToolDef[] = [
     },
   },
 
+  {
+    name: 'bulk_add_classes_simple',
+    description: "N ta oddiy sinf qo'shish — 1-A, 2-A, 3-A, ... (fuqalarsiz).",
+    params: [{ name: 'count', type: 'number', description: 'Nechta sinf', required: true }],
+    run: (a, ctx) => {
+      const count = Math.max(1, Math.min(100, n(a.count) ?? 11))
+      const p = ctx.getProject()
+      const existing = new Set(p.classes.map((c) => c.name))
+      const created: SchoolClass[] = []
+      // 1-A, 2-A, ..., 11-A, 1-B, 2-B, ...
+      const letters = ['A', 'B', 'V', 'G', 'D', 'E']
+      let placed = 0
+      for (const L of letters) {
+        for (let g = 1; g <= 11 && placed < count; g++) {
+          const name = `${g}-${L}`
+          if (existing.has(name)) continue
+          const c = newClass(p.school, name)
+          c.short = name
+          created.push(c)
+          existing.add(name)
+          placed++
+        }
+        if (placed >= count) break
+      }
+      ctx.addMany('classes', created)
+      return { ok: true, message: `✓ ${created.length} ta sinf qo'shildi.`, navigate: 'classes' }
+    },
+  },
+
+  {
+    name: 'bulk_add_subjects',
+    description: "N ta fan qo'shish — standart maktab dasturidan: Matematika, Ona tili, O'qish, Rus tili, Ingliz tili, Fizika, Kimyo, Biologiya, Geografiya, Tarix, Adabiyot, Jismoniy tarbiya, Informatika, Musiqa, Tasviriy san'at, Texnologiya, Tarbiyaviy soat...",
+    params: [{ name: 'count', type: 'number', description: 'Nechta fan (standart 17)', required: true }],
+    run: (a, ctx) => {
+      const count = Math.max(1, Math.min(50, n(a.count) ?? 17))
+      const DEFAULT_SUBJECTS: { name: string; short: string }[] = [
+        { name: 'Matematika', short: 'Mate' },
+        { name: 'Ona tili', short: 'Ona' },
+        { name: "O'qish", short: "O'qi" },
+        { name: 'Rus tili', short: 'Rus' },
+        { name: 'Ingliz tili', short: 'Ingl' },
+        { name: 'Fizika', short: 'Fiz' },
+        { name: 'Kimyo', short: 'Kim' },
+        { name: 'Biologiya', short: 'Biol' },
+        { name: 'Geografiya', short: 'Geo' },
+        { name: 'Tarix', short: 'Tar' },
+        { name: 'Adabiyot', short: 'Adab' },
+        { name: 'Jismoniy tarbiya', short: 'Jism' },
+        { name: 'Informatika', short: 'Inf' },
+        { name: 'Musiqa', short: 'Musi' },
+        { name: "Tasviriy san'at", short: 'Tasv' },
+        { name: 'Texnologiya', short: 'Texn' },
+        { name: 'Tarbiyaviy soat', short: 'Tarb' },
+        { name: 'Astronomiya', short: 'Astr' },
+        { name: 'Iqtisod', short: 'Iqt' },
+        { name: 'Huquq', short: 'Huq' },
+        { name: 'Milliy g\'oya', short: 'Mill' },
+        { name: 'Chaqiriqqa tayyorgarlik', short: 'Chaq' },
+      ]
+      const p = ctx.getProject()
+      const existing = new Set(p.subjects.map((s) => s.name.toLowerCase()))
+      const created: Subject[] = []
+      let i = 0
+      for (const sd of DEFAULT_SUBJECTS) {
+        if (created.length >= count) break
+        if (existing.has(sd.name.toLowerCase())) continue
+        const sub = newSubject(p.school, sd.name, p.subjects.length + created.length)
+        sub.short = sd.short
+        created.push(sub)
+        i++
+      }
+      ctx.addMany('subjects', created)
+      return { ok: true, message: `✓ ${created.length} ta fan qo'shildi.`, navigate: 'subjects' }
+    },
+  },
+
+  {
+    name: 'bulk_add_teachers',
+    description: "N ta o'qituvchi qo'shish — ism/familiyalar avtomatik generatsiya qilinadi.",
+    params: [{ name: 'count', type: 'number', description: 'Nechta o\'qituvchi (standart 30)', required: true }],
+    run: (a, ctx) => {
+      const count = Math.max(1, Math.min(200, n(a.count) ?? 30))
+      const SURNAMES = ['Aliyev', 'Soliyev', 'Qodirov', 'Yoqubov', 'Yusupov', 'Rahimov', 'Toshev', 'Karimov', 'Ismoilov', 'Nazarov', 'Mirzayev', 'Olimov', 'Jo\'rayev', 'Abdullayev', 'Hamidov', 'Eshonqulov', 'Boboqulov', 'Rustamov', 'Ergashev', 'Umarov', 'G\'ulomov', 'Normatov', 'Komilov', 'Vohidov', 'Qosimov', 'Sulaymonov', 'Xo\'jayev', 'Nurmatov', 'Saidov', 'Mahmudov']
+      const FEMALE_SURNAMES = SURNAMES.map((s) => s + 'a')
+      const FIRST_INITIALS = ['V', 'A', 'D', 'B', 'M', 'K', 'J', 'S', 'R', 'G', 'N', 'U', 'T', 'E', 'I', 'F']
+      const p = ctx.getProject()
+      const existingNames = new Set(p.teachers.map((t) => t.fullName.toLowerCase()))
+      const created: Teacher[] = []
+      let attempts = 0
+      while (created.length < count && attempts < count * 10) {
+        attempts++
+        const isFemale = created.length % 3 === 0  // ~1/3 ayol o'qituvchilar
+        const sur = isFemale
+          ? FEMALE_SURNAMES[Math.floor(Math.random() * FEMALE_SURNAMES.length)]
+          : SURNAMES[Math.floor(Math.random() * SURNAMES.length)]
+        const init1 = FIRST_INITIALS[Math.floor(Math.random() * FIRST_INITIALS.length)]
+        const init2 = FIRST_INITIALS[Math.floor(Math.random() * FIRST_INITIALS.length)]
+        const fullName = `${sur} ${init1}.${init2}.`
+        if (existingNames.has(fullName.toLowerCase())) continue
+        existingNames.add(fullName.toLowerCase())
+        const t = newTeacher(p.school, fullName)
+        t.short = `${sur.slice(0, 6)} ${init1}.`
+        created.push(t)
+      }
+      ctx.addMany('teachers', created)
+      return { ok: true, message: `✓ ${created.length} ta o'qituvchi qo'shildi.`, navigate: 'teachers' }
+    },
+  },
+
+  {
+    name: 'bulk_add_rooms',
+    description: "N ta xona qo'shish — raqamlar bilan (101, 102, ..., 201, 202, ...).",
+    params: [
+      { name: 'count', type: 'number', description: 'Nechta xona (standart 30)', required: true },
+      { name: 'startFloor', type: 'number', description: 'Boshlang\'ich qavat (standart 1)' },
+    ],
+    run: (a, ctx) => {
+      const count = Math.max(1, Math.min(200, n(a.count) ?? 30))
+      const startFloor = Math.max(1, n(a.startFloor) ?? 1)
+      const p = ctx.getProject()
+      const existing = new Set(p.rooms.map((r) => r.name))
+      const created: Room[] = []
+      let floor = startFloor
+      let room = 1
+      while (created.length < count) {
+        const name = `${floor}${String(room).padStart(2, '0')}`
+        if (!existing.has(name)) {
+          const r = newRoom(p.school, name)
+          r.short = name
+          r.capacity = 30
+          created.push(r)
+          existing.add(name)
+        }
+        room++
+        if (room > 20) {
+          floor++
+          room = 1
+          if (floor > 10) break
+        }
+      }
+      ctx.addMany('rooms', created)
+      return { ok: true, message: `✓ ${created.length} ta xona qo'shildi.`, navigate: 'rooms' }
+    },
+  },
+
   // ============ TAHRIRLASH ============
   {
     name: 'update_teacher',

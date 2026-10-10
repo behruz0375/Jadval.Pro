@@ -37,21 +37,24 @@ export function DistributionPage() {
     // Pre-flight: loyihani tekshiramiz
     const check = validateProject(project)
     if (check.willFail) {
+      // ERROR darajali muammolar: davom etmaslik tavsiya qilinadi, lekin foydalanuvchi istasa — konfirm bilan davom etadi
       const errorMessages = check.issues
         .filter((i) => i.severity === 'error')
         .map((i) => '• ' + i.message)
         .join('\n')
       const first = check.issues.find((i) => i.severity === 'error')
-      toast.error(
-        `Jadval tuzib bo'lmaydi — ${check.issues.filter((i) => i.severity === 'error').length} ta xato topildi:\n${errorMessages.slice(0, 400)}${first?.hint ? '\n\nMaslahat: ' + first.hint : ''}`,
-      )
-      return
+      const msg =
+        `Jadval tuzishga qiyinchiliklar topildi (${check.issues.filter((i) => i.severity === 'error').length} ta xato):\n\n` +
+        errorMessages.slice(0, 500) +
+        (first?.hint ? '\n\nMaslahat: ' + first.hint : '') +
+        '\n\nDavom etasizmi? (Generator qo‘lidan kelgancha joylashtiradi, qolgani unplaced bo‘lib qoladi)'
+      if (!confirm(msg)) return
     }
     if (check.issues.length > 0) {
-      // Ogohlantirishlar bor — toast'da ko'rsatamiz, lekin oldinga davom ettiramiz
+      // Ogohlantirishlar bor — toast'da ko'rsatamiz, oldinga davom ettiramiz
       const warningCount = check.issues.filter((i) => i.severity === 'warning').length
       if (warningCount > 0) {
-        toast.info(`${warningCount} ta ogohlantirish — jadval tuziladi, lekin diqqat qiling`)
+        toast.info(`${warningCount} ta ogohlantirish — generator qo‘lidan kelgancha joylashtiradi`)
       }
     }
     setOptsOpen(true)

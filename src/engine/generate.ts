@@ -81,10 +81,12 @@ export function generateTimetable(
   onProgress?: ProgressFn,
   onSnapshot?: SnapshotFn,
 ): TimetableVersion {
-  // Loyihani kattaligiga qarab restarts avto-moslanadi (kattaroq → ko'proq urinish)
+  // Loyihani kattaligiga qarab restarts avto-moslanadi.
+  // KATTA loyihalar uchun ko'p restart emas, bitta kuchli urinish yaxshiroq —
+  // chunki har restart MRV sort + greedy + local search = minutlar.
   const totalHours = project.lessons.reduce((a, l) => a + l.hoursPerWeek * Math.max(1, l.classIds.length), 0)
   const autoRestartsBase =
-    totalHours < 50 ? 2 : totalHours < 150 ? 3 : totalHours < 300 ? 5 : totalHours < 600 ? 7 : 10
+    totalHours < 50 ? 2 : totalHours < 150 ? 3 : totalHours < 300 ? 4 : totalHours < 600 ? 3 : 2
   const restarts = Math.max(1, Math.min(10, opts.restarts ?? autoRestartsBase))
   const autoRelax = opts.autoRelax !== false // standart: yoqilgan
 
@@ -436,34 +438,32 @@ function generateOnce(
   //  - ko'p sinfli dars oldin (ko'p qiyinchilik)
   //  - kam vaqtli o'qituvchi (teacher.weeklyMax kichik) oldin
   //  - og'ir fan oldin
-  const staticDomain = (s: Session): number => {
-    let n = 0
+  // PRE-COMPUTE: har sessiya uchun domain + teacherLoad ratio bir marta hisoblaymiz.
+  // Avval sort callback'da hisoblanardi — O(n log n * calc) = katta loyihada bir necha sekund.
+  // Hozir — O(n * calc) + O(n log n * compare) = 10x tezroq.
+  const sortCache = new Map<string, { dom: number; tr: number }>()
+  for (const s of sessions) {
+    let dom = 0
     for (let d = 0; d < days; d++)
       for (let p = 1; p + s.length - 1 <= maxP; p++) {
         let ok = true
-        for (const cid of s.classIds) if (!classAllowed.get(cid)?.has(d * 100 + p)) ok = false
-        if (ok) n++
+        for (const cid of s.classIds) if (!classAllowed.get(cid)?.has(d * 100 + p)) { ok = false; break }
+        if (ok) dom++
       }
-    return n
-  }
-  const teacherLoadRatio = (s: Session): number => {
-    // Qanchalik to'liq? (weeklyMax ga nisbatan shu lesson ulushi) — ko'p yuklangan o'qituvchi birinchi
-    let max = 0
+    let tr = 0
     for (const tid of s.teacherIds) {
       const t = teacherById.get(tid)
-      if (t && t.weeklyMax > 0) max = Math.max(max, 1 / t.weeklyMax)
+      if (t && t.weeklyMax > 0) tr = Math.max(tr, 1 / t.weeklyMax)
     }
-    return max
+    sortCache.set(s.id, { dom, tr })
   }
   sessions.sort((a, b) => {
-    const da = staticDomain(a)
-    const db = staticDomain(b)
-    if (da !== db) return da - db
+    const ca = sortCache.get(a.id)!
+    const cb = sortCache.get(b.id)!
+    if (ca.dom !== cb.dom) return ca.dom - cb.dom
     if (a.length !== b.length) return b.length - a.length
     if (a.classIds.length !== b.classIds.length) return b.classIds.length - a.classIds.length
-    const ta = teacherLoadRatio(a)
-    const tb = teacherLoadRatio(b)
-    if (ta !== tb) return tb - ta
+    if (ca.tr !== cb.tr) return cb.tr - ca.tr
     return b.weight - a.weight
   })
 
