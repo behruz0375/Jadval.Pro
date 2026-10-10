@@ -25,9 +25,10 @@ export function MasterGrid() {
 
   const [mode, setMode] = useState<ViewMode>('class')
   const [drag, setDrag] = useState<{ id: string; day: number; slot: number } | null>(null)
-  const list = mode === 'class' ? classes : mode === 'teacher' ? teachers : rooms
-  const [entityId, setEntityId] = useState<string>(list[0]?.id ?? '')
-  const currentId = list.find((x) => x.id === entityId)?.id ?? list[0]?.id ?? ''
+  const [hideEmpty, setHideEmpty] = useState(true)
+  const fullList = mode === 'class' ? classes : mode === 'teacher' ? teachers : rooms
+  const [entityId, setEntityId] = useState<string>(fullList[0]?.id ?? '')
+  const currentId = fullList.find((x) => x.id === entityId)?.id ?? fullList[0]?.id ?? ''
 
   const subjById = (id: string) => subjects.find((s) => s.id === id)
   const lessonById = (id: string) => lessons.find((l) => l.id === id)
@@ -48,6 +49,19 @@ export function MasterGrid() {
     }
     return m
   }, [version, mode])
+
+  // Bo'sh ustunlarni yashirish — hech qanday dars yo'q entitylarni filterdan o'tkazadi
+  const hasAnyLesson = (id: string): boolean => {
+    for (let d = 0; d < days; d++) for (let p = 1; p <= maxP; p++) {
+      if (cellMap.has(`${id}:${d}:${p}`)) return true
+    }
+    return false
+  }
+  const list = useMemo(
+    () => (hideEmpty ? fullList.filter((x) => hasAnyLesson(x.id)) : fullList),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [fullList, hideEmpty, cellMap],
+  )
 
   // Sinf rejimida bir ustun ichida drag bilan ko'chirish / almashtirish
   const dropHere = (toDay: number, toSlot: number) => {
@@ -108,28 +122,50 @@ export function MasterGrid() {
     )
   }
 
+  const hiddenCount = fullList.length - list.length
+
   return (
     <div className="flex h-full flex-col gap-3">
-      <div className="flex w-fit gap-1 rounded-lg bg-surface-2 p-1">
-        {modes.map((m) => {
-          const Icon = m.icon
-          return (
-            <button
-              key={m.id}
-              onClick={() => {
-                setMode(m.id)
-                const next = m.id === 'class' ? classes : m.id === 'teacher' ? teachers : rooms
-                setEntityId(next[0]?.id ?? '')
-              }}
-              className={cx(
-                'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-                mode === m.id ? 'bg-accent text-accent-fg' : 'text-muted hover:text-ink',
-              )}
-            >
-              <Icon size={15} /> {m.label}
-            </button>
-          )
-        })}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex w-fit gap-1 rounded-lg bg-surface-2 p-1">
+          {modes.map((m) => {
+            const Icon = m.icon
+            return (
+              <button
+                key={m.id}
+                onClick={() => {
+                  setMode(m.id)
+                  const next = m.id === 'class' ? classes : m.id === 'teacher' ? teachers : rooms
+                  setEntityId(next[0]?.id ?? '')
+                }}
+                className={cx(
+                  'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                  mode === m.id ? 'bg-accent text-accent-fg' : 'text-muted hover:text-ink',
+                )}
+              >
+                <Icon size={15} /> {m.label}
+              </button>
+            )
+          })}
+        </div>
+        <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-sm">
+          <input
+            type="checkbox"
+            checked={hideEmpty}
+            onChange={(e) => setHideEmpty(e.target.checked)}
+            className="h-4 w-4 accent-accent"
+          />
+          Bo'shlarni yashirish
+          {hiddenCount > 0 && hideEmpty && (
+            <span className="rounded-md bg-accent/15 px-1.5 py-0.5 text-[11px] font-semibold text-accent">
+              -{hiddenCount}
+            </span>
+          )}
+        </label>
+        <span className="ml-auto text-xs text-muted">
+          Ko'rsatilmoqda: <span className="font-semibold text-ink">{list.length}</span>
+          {hiddenCount > 0 && hideEmpty && ` / ${fullList.length}`}
+        </span>
       </div>
 
       <div className="flex min-h-0 flex-1 gap-3">
@@ -166,16 +202,24 @@ export function MasterGrid() {
                 Array.from({ length: maxP }).map((_, pi) => {
                   const p = pi + 1
                   const firstOfDay = pi === 0
+                  const lastOfDay = pi === maxP - 1
+                  // Zebra stripe by day — har kun kichik rang bilan ajratiladi
+                  const dayBand = d % 2 === 0 ? 'bg-surface' : 'bg-surface-2/50'
                   return (
-                    <tr key={`${d}:${p}`}>
+                    <tr key={`${d}:${p}`} className={cx(dayBand, firstOfDay && d > 0 && 'border-t-4 border-t-accent/20')}>
                       <td
                         className={cx(
-                          'sticky left-0 z-10 border-r border-border bg-surface-2 px-2 py-0.5 text-[11px]',
-                          firstOfDay && d > 0 ? 'border-t-2 border-t-border' : 'border-b border-b-border/60',
+                          'sticky left-0 z-10 border-r-2 border-r-border px-2 py-0.5 text-[11px]',
+                          dayBand,
+                          firstOfDay && d > 0 ? 'border-t-4 border-t-accent/20' : 'border-b border-b-border/50',
+                          lastOfDay && 'border-b-2 border-b-border/80',
                         )}
                       >
-                        {firstOfDay && <span className="mr-1 font-bold text-accent">{DAYS_SHORT[d]}</span>}
-                        <span className="font-semibold">{p}</span>
+                        {/* Har qatorda kun belgisi — faqat 1-qatorda emas */}
+                        <span className={cx('mr-1 inline-block w-6 text-center font-bold', firstOfDay ? 'text-accent' : 'text-accent/40')}>
+                          {DAYS_SHORT[d]}
+                        </span>
+                        <span className="font-semibold tabular-nums">{p}</span>
                       </td>
                       {list.map((x) => {
                         const e = cellMap.get(`${x.id}:${d}:${p}`)
@@ -198,31 +242,37 @@ export function MasterGrid() {
                               dropHere(d, p)
                             }}
                             className={cx(
-                              'border-l border-border/60 p-0.5',
+                              'border-l border-border/50 p-0.5',
                               canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
-                              firstOfDay && d > 0 ? 'border-t-2 border-t-border' : 'border-b border-b-border/60',
-                              selectedCol && 'bg-accent/5',
+                              firstOfDay && d > 0 ? 'border-t-4 border-t-accent/20' : 'border-b border-b-border/50',
+                              lastOfDay && 'border-b-2 border-b-border/80',
+                              selectedCol && 'bg-accent/10',
                               mode === 'class' && drag && drag.id === x.id && 'ring-1 ring-inset ring-accent/40',
                             )}
                           >
                             {subj ? (
                               <div
                                 style={{
-                                  minWidth: 46,
-                                  height: ui.compact ? 26 : 34,
+                                  minWidth: 56,
+                                  height: ui.compact ? 28 : 36,
                                   background: color
                                     ? ui.gradient
-                                      ? `linear-gradient(135deg, ${color}26, ${color}14)`
-                                      : `${color}22`
+                                      ? `linear-gradient(135deg, ${color}30, ${color}18)`
+                                      : `${color}26`
                                     : undefined,
                                   borderLeft: color ? `3px solid ${color}` : undefined,
                                 }}
-                                className="mx-auto grid place-items-center rounded font-semibold leading-none"
+                                className="mx-auto grid place-items-center rounded-md px-1 text-[12px] font-semibold leading-none"
                               >
                                 {subj.short || subj.name}
                               </div>
                             ) : (
-                              <div style={{ minWidth: 46, height: ui.compact ? 26 : 34 }} />
+                              <div
+                                style={{ minWidth: 56, height: ui.compact ? 28 : 36 }}
+                                className="mx-auto grid place-items-center text-[10px] text-muted/30"
+                              >
+                                ·
+                              </div>
                             )}
                           </td>
                         )
