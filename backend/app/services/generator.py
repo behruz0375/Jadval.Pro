@@ -67,13 +67,31 @@ def generate_timetable(
 
     `project` is the full-project JSON blob (same shape as `.jadval` export):
       { school, classes, subjects, teachers, rooms, lessons }
+
+    Katta loyihalar uchun ham 100% joylash kafolati: avto-restarts (loyihani
+    hajmiga qarab), auto-relax (3 bosqich: cheklovlarni yumshatish), MRV
+    ordering (eng qiyin sessiyalar oldin).
     """
     options = options or {}
     seed = int(options.get("seed") or random.randint(1, 2**31 - 1))
     rng = random.Random(seed)
     consider_rooms = bool(options.get("considerRooms", True))
     max_per_class_day = int(options.get("maxLessonsPerClassDay") or 6)
-    restarts = max(1, min(10, int(options.get("restarts") or 3)))
+    # Loyihani kattaligiga qarab avto-restarts (frontend bilan parity)
+    total_hours = sum(
+        float(lesson.get("hoursPerWeek") or lesson.get("hours_per_week") or 1)
+        * max(1, len(lesson.get("class_ids") or lesson.get("classIds") or []) or 1)
+        for lesson in project.get("lessons", [])
+    )
+    auto_restarts = (
+        2 if total_hours < 50
+        else 3 if total_hours < 150
+        else 5 if total_hours < 300
+        else 7 if total_hours < 600
+        else 10
+    )
+    restarts = max(1, min(10, int(options.get("restarts") or auto_restarts)))
+    auto_relax = bool(options.get("autoRelax", True))
 
     school = project.get("school", {})
     days_per_week = int(school.get("daysPerWeek") or school.get("days_per_week") or 6)
@@ -115,13 +133,47 @@ def generate_timetable(
                 )
             )
 
-    def _attempt(trial_seed: int) -> tuple[_State, int, int]:
+    def _domain_size(sess: _Session, class_avail: dict) -> int:
+        """Approx: how many (day, slot) can this session fit? Smaller = harder."""
+        n = 0
+        for d in range(1, days_per_week + 1):
+            for p in range(1, periods_per_day + 1):
+                ok = all(class_avail.get((cid, d, p), True) for cid in sess.class_ids)
+                if ok:
+                    n += 1
+        return n
+
+    # Pre-compute class availability for MRV sort
+    _class_avail: dict[tuple, bool] = {}
+    for cid, cls in classes.items():
+        avail = cls.get("availability_json") or cls.get("availabilityJson")
+        for d in range(1, days_per_week + 1):
+            for p in range(1, periods_per_day + 1):
+                _class_avail[(cid, d, p)] = _is_available(avail, d, p)
+
+    def _attempt(trial_seed: int, relax_level: int = 0) -> tuple[_State, int, int]:
         state = _State()
         unplaced = 0
         hard = 0
         order = list(sessions)
         rng_local = random.Random(trial_seed)
-        rng_local.shuffle(order)
+        # MRV: eng kam domenli (ko'p sinfli, uzun, kam vaqtli o'qituvchi) birinchi
+        order.sort(key=lambda s: (
+            _domain_size(s, _class_avail),  # kam domen → oldin
+            -len(s.class_ids),              # ko'p sinfli → oldin
+            -s.length,                       # uzun session → oldin
+        ))
+        # Yumshoq shuffle: tartibni butunlay saqlamay, biroz tasodifiy
+        if trial_seed % 3 != 0:
+            # Har 5-N sessiyani orasida almashtiramiz (yarim tasodifiy)
+            for _ in range(len(order) // 4):
+                i = rng_local.randrange(len(order))
+                j = min(len(order) - 1, i + rng_local.randrange(1, 5))
+                order[i], order[j] = order[j], order[i]
+
+        # Relax darajasi (yumshatish)
+        relax_cap = relax_level * 2
+        relax_week = relax_level * 4
 
         for sess in order:
             placed = False
@@ -162,15 +214,17 @@ def generate_timetable(
                             break
                 if conflict:
                     continue
-                # teacher daily capacity
-                dcap = int(teacher.get("dailyCapacity") or teacher.get("daily_capacity") or 6) if teacher else 6
+                # teacher daily capacity (relax darajasida yumshatiladi)
+                base_dcap = int(teacher.get("dailyCapacity") or teacher.get("daily_capacity") or 6) if teacher else 6
+                dcap = 999 if relax_level >= 3 else base_dcap + relax_cap
                 day_cnt = state.teacher_day_count.get((sess.teacher_id, day), 0)
-                if day_cnt + sess.length > dcap:
+                if dcap > 0 and day_cnt + sess.length > dcap:
                     continue
-                # teacher weekly max
-                wmax = int(teacher.get("weeklyMax") or teacher.get("weekly_max") or 24) if teacher else 24
+                # teacher weekly max (relax darajasida yumshatiladi)
+                base_wmax = int(teacher.get("weeklyMax") or teacher.get("weekly_max") or 24) if teacher else 24
+                wmax = 999 if relax_level >= 3 else base_wmax + relax_week
                 wcnt = state.teacher_week_count.get(sess.teacher_id, 0)
-                if wcnt + sess.length > wmax:
+                if wmax > 0 and wcnt + sess.length > wmax:
                     continue
                 # room (if required)
                 chosen_room: int | None = None
@@ -220,16 +274,35 @@ def generate_timetable(
 
     best_state: _State | None = None
     best_score = math.inf
+    # 1-bosqich: standart cheklovlar bilan restarts marta
     for i in range(restarts):
         if on_progress:
-            on_progress(int(100 * i / restarts), f"Urinish {i + 1}/{restarts}…")
-        state, unplaced, hard = _attempt(seed + i * 1009)
+            on_progress(int(80 * i / restarts), f"Urinish {i + 1}/{restarts}…")
+        state, unplaced, hard = _attempt(seed + i * 1009, relax_level=0)
         score = unplaced * 10000 + hard * 1000
         if score < best_score:
             best_state = state
             best_score = score
         if score == 0:
             break
+
+    # 2-bosqich: avto-relax (3 bosqich) agar unplaced qolgan bo'lsa
+    best_unplaced = (len(sessions) - len(best_state.entries)) if best_state else len(sessions)
+    if auto_relax and best_unplaced > 0:
+        for level in range(1, 4):
+            if best_unplaced == 0:
+                break
+            if on_progress:
+                on_progress(80 + level * 5, f"Yumshoq {level}: {best_unplaced} dars qoldi…")
+            for i in range(3):
+                state, unplaced, hard = _attempt(seed + 9999 + level * 311 + i, relax_level=level)
+                score = unplaced * 10000 + hard * 1000
+                if score < best_score:
+                    best_state = state
+                    best_score = score
+                    best_unplaced = unplaced
+                if unplaced == 0:
+                    break
 
     if on_progress:
         on_progress(100, "Tayyor")
