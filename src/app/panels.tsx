@@ -48,7 +48,7 @@ export const PANEL_GROUPS: PanelGroup[] = [
       { id: 'owner', label: 'Boshqaruv paneli', icon: ShieldCheck, roles: ['owner'] },
       { id: 'dashboard', label: 'Bosh sahifa', icon: LayoutDashboard, roles: BOTH },
       { id: 'distribution', label: 'Taqsimot', icon: LayoutGrid, roles: BOTH },
-      { id: 'ai', label: 'AI yordamchi', icon: Sparkles, roles: SCHOOL },
+      { id: 'ai', label: 'AI yordamchi', icon: Sparkles, roles: BOTH },
     ],
   },
   {
