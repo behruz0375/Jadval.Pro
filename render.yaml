@@ -1,0 +1,45 @@
+# JadvalPro — Render Blueprint
+# https://render.com/docs/blueprint-spec
+#
+# "Create a Blueprint" bo'limida bu faylni ko'rsatsangiz, Render:
+#   - jadvalpro-api web service'ini quradi (Docker, backend/ ichidan)
+#   - jadvalpro-db PostgreSQL ni yaratadi (bepul, 90 kun)
+#   - DATABASE_URL va SECRET_KEY ni avtomatik ulaydi
+
+databases:
+  - name: jadvalpro-db
+    databaseName: jadvalpro
+    user: jadvalpro
+    plan: free  # 1 GB, 90 kundan keyin suspend (zaxira olib qayta yaratish mumkin)
+    region: frankfurt
+
+services:
+  - type: web
+    name: jadvalpro-api
+    runtime: docker
+    plan: free  # 15 daqiqa harakatsizlikdan keyin uxlaydi, so'rovda qaytadan uyg'onadi
+    region: frankfurt
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true  # har git push dan keyin avto-deploy
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: jadvalpro-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true  # Render tasodifiy 32-char token generatsiya qiladi
+      - key: DEBUG
+        value: "false"
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "43200"
+      - key: OWNER_LOGIN
+        value: admin
+      - key: OWNER_PASSWORD
+        sync: false  # birinchi deploy'da Render dashboard'dan qo'lda kiritasiz
+      - key: CORS_ORIGINS
+        value: http://localhost:5173,http://localhost:5178
+      - key: CORS_ORIGIN_REGEX
+        # Vercel/Netlify preview, va o'z domeningiz
+        value: ^https?://(.*\.)?(vercel\.app|netlify\.app|jadval\.pro)$

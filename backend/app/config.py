@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24 * 30
     database_url: str = "sqlite:///./jadvalpro.db"
     cors_origins: str = "http://localhost:5173,http://localhost:5178"
+    # Qo'shimcha ruxsat berilgan origin pattern (regex) — masalan "https://.*\\.vercel\\.app$"
+    cors_origin_regex: str | None = None
     owner_login: str = "admin"
     owner_password: str = "admin123"
 
