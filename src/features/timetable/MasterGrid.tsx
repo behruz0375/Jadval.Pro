@@ -227,6 +227,9 @@ export function MasterGrid() {
                         const color = ui.blackWhite ? undefined : subj?.color
                         const selectedCol = currentId === x.id
                         const canDrag = mode === 'class' && !!e
+                        // ProRector uslubi — har katak 3 qator: fan / o'qituvchi / xona
+                        const teacher = e ? teachers.find((t) => t.id === e.teacherId) : null
+                        const room = e && e.roomId ? rooms.find((r) => r.id === e.roomId) : null
                         return (
                           <td
                             key={x.id}
@@ -253,23 +256,35 @@ export function MasterGrid() {
                             {subj ? (
                               <div
                                 style={{
-                                  minWidth: 56,
-                                  height: ui.compact ? 28 : 36,
+                                  minWidth: ui.compact ? 60 : 72,
+                                  minHeight: ui.compact ? 40 : 52,
                                   background: color
                                     ? ui.gradient
-                                      ? `linear-gradient(135deg, ${color}30, ${color}18)`
-                                      : `${color}26`
-                                    : undefined,
-                                  borderLeft: color ? `3px solid ${color}` : undefined,
+                                      ? `linear-gradient(135deg, ${color}3a, ${color}1f)`
+                                      : `${color}30`
+                                    : 'rgba(100,100,100,0.08)',
+                                  borderLeft: color ? `3px solid ${color}` : '3px solid rgba(100,100,100,0.3)',
                                 }}
-                                className="mx-auto grid place-items-center rounded-md px-1 text-[12px] font-semibold leading-none"
+                                className="mx-auto flex flex-col items-center justify-center gap-[1px] rounded-md px-1 py-0.5 leading-tight"
                               >
-                                {subj.short || subj.name}
+                                <div className={cx('font-bold text-ink', ui.compact ? 'text-[11px]' : 'text-[12px]')}>
+                                  {subj.short || subj.name}
+                                </div>
+                                {teacher && (
+                                  <div className={cx('truncate text-ink/75', ui.compact ? 'text-[9px]' : 'text-[10px]')}>
+                                    {teacher.short || teacher.fullName.split(' ')[0]}
+                                  </div>
+                                )}
+                                {room && (
+                                  <div className={cx('font-medium text-ink/60', ui.compact ? 'text-[8px]' : 'text-[9px]')}>
+                                    {room.short || room.name}
+                                  </div>
+                                )}
                               </div>
                             ) : (
                               <div
-                                style={{ minWidth: 56, height: ui.compact ? 28 : 36 }}
-                                className="mx-auto grid place-items-center text-[10px] text-muted/30"
+                                style={{ minWidth: ui.compact ? 60 : 72, minHeight: ui.compact ? 40 : 52 }}
+                                className="mx-auto grid place-items-center text-[10px] text-muted/25"
                               >
                                 ·
                               </div>
