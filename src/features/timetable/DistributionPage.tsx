@@ -45,7 +45,10 @@ export function DistributionPage() {
         addTimetable(v)
         setSelectedId(v.id)
         if (v.stats.unplaced === 0) toast.success(`Jadval tayyor! ${v.stats.placed} dars joylashtirildi`)
-        else toast.info(`Jadval tuzildi. ${v.stats.unplaced} dars joylashmadi`)
+        else {
+          const pct = Math.round((v.stats.placed / (v.stats.placed + v.stats.unplaced)) * 100)
+          toast.info(`Jadval tuzildi: ${pct}% dars joylashtirildi. ${v.stats.unplaced} dars sig'madi — "Maktab" sozlamalaridan kuniga dars sonini oshiring yoki Konfliktlarni tekshiring.`)
+        }
       },
       (e) => toast.error('Xatolik: ' + e),
     )

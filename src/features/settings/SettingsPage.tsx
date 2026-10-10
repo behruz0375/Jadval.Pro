@@ -16,6 +16,7 @@ import { useToast } from '@/store/toast'
 import { useT } from '@/i18n'
 import { cx } from '@/utils'
 import type { LucideIcon } from 'lucide-react'
+import { CloudSyncCard } from '@/features/cloud/CloudSyncCard'
 
 const ACCENT_PRESETS = ['#4457d6', '#2563eb', '#059669', '#7c3aed', '#db2777', '#ea580c', '#0891b2', '#dc2626']
 
@@ -160,6 +161,9 @@ export function SettingsPage() {
           <RotateCcw size={15} /> {t('Standartga qaytarish')}
         </button>
       </div>
+
+      {/* Bulut sinxronizatsiya */}
+      <CloudSyncCard />
 
       {/* Dastur haqida */}
       <Section icon={Info} title={t('Dastur haqida')}>

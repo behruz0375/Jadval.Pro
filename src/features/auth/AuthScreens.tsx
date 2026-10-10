@@ -5,6 +5,7 @@ import { useToast } from '@/store/toast'
 import { Modal } from '@/components/Modal'
 import { Field, TextField } from '@/components/Field'
 import { ContactAdmin } from '@/components/ContactAdmin'
+import { BackgroundSlideshow } from '@/components/BackgroundSlideshow'
 import { APP_VERSION } from '@/constants'
 
 /** Tiklash kodi bilan parolni qayta o'rnatish oynasi (Zavuch/O'TIBDO' parolni unutganda) */
@@ -84,9 +85,11 @@ export function RecoveryModal({ role, open, onClose }: { role: StaffRole; open: 
 function AuthLayout({ title, children, onBack }: { title: string; children: React.ReactNode; onBack?: () => void }) {
   return (
     <div className="relative grid min-h-screen place-items-center overflow-hidden bg-bg p-4">
+      {/* Orqa fonda — jadval mavzusidagi slideshow (4 ta scena, aylanib turadi) */}
+      <BackgroundSlideshow opacity={0.4} />
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="blob animate-floatA h-96 w-96 bg-accent/40" style={{ top: '-6rem', left: '-4rem' }} />
-        <div className="blob animate-floatB h-80 w-80" style={{ bottom: '-5rem', right: '-3rem', background: 'rgb(99 102 241 / 0.3)' }} />
+        <div className="blob animate-floatA h-96 w-96 bg-accent/30" style={{ top: '-6rem', left: '-4rem' }} />
+        <div className="blob animate-floatB h-80 w-80" style={{ bottom: '-5rem', right: '-3rem', background: 'rgb(99 102 241 / 0.25)' }} />
       </div>
       <div className="relative z-10 w-full max-w-lg">
         {onBack && (

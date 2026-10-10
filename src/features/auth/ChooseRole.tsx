@@ -3,6 +3,7 @@ import { LayoutGrid, GraduationCap, Users, ShieldCheck, ArrowRight, ArrowLeft, S
 import { OwnerLoginModal } from './AuthScreens'
 import { useAuth } from '@/store/auth'
 import { useToast } from '@/store/toast'
+import { BackgroundSlideshow } from '@/components/BackgroundSlideshow'
 import { telegramUrl } from '@/utils'
 import { APP_VERSION } from '@/constants'
 
@@ -62,10 +63,12 @@ export function ChooseRole({
 
   return (
     <div className="relative grid min-h-screen place-items-center overflow-hidden bg-bg p-4">
+      {/* Jadval mavzusidagi orqa fon slideshow (4 ta scena) */}
+      <BackgroundSlideshow opacity={0.35} />
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="blob animate-floatA h-96 w-96 bg-accent/40" style={{ top: '-6rem', left: '-4rem' }} />
-        <div className="blob animate-floatB h-96 w-96" style={{ bottom: '-6rem', right: '-4rem', background: 'rgb(236 72 153 / 0.3)' }} />
-        <div className="blob animate-floatC h-72 w-72" style={{ top: '30%', left: '40%', background: 'rgb(16 185 129 / 0.22)' }} />
+        <div className="blob animate-floatA h-96 w-96 bg-accent/30" style={{ top: '-6rem', left: '-4rem' }} />
+        <div className="blob animate-floatB h-96 w-96" style={{ bottom: '-6rem', right: '-4rem', background: 'rgb(236 72 153 / 0.2)' }} />
+        <div className="blob animate-floatC h-72 w-72" style={{ top: '30%', left: '40%', background: 'rgb(16 185 129 / 0.18)' }} />
       </div>
 
       <div className="relative z-10 w-full max-w-4xl">

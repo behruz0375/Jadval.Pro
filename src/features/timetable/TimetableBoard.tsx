@@ -18,6 +18,7 @@ import {
 import { useProject } from '@/store/project'
 import { useUI } from '@/store/ui'
 import { useToast } from '@/store/toast'
+import { useT } from '@/i18n'
 import { useGenerator } from './useGenerator'
 import { Modal } from '@/components/Modal'
 import { Field, SelectField } from '@/components/Field'
@@ -34,6 +35,7 @@ export function TimetableBoard() {
   const updateTimetable = useProject((s) => s.updateTimetable)
   const toast = useToast()
   const ui = useUI()
+  const tr = useT()
   const { running, progress, message, run, stop } = useGenerator()
 
   const { school, classes, subjects, teachers, rooms, lessons, timetables } = project
@@ -323,9 +325,17 @@ export function TimetableBoard() {
 
   const clearClass = () => {
     if (!cls) return
+    const count = entries.filter((e) => e.classId === cls.id && !e.locked).length
+    if (count === 0) return
+    if (!window.confirm(`${cls.name} sinfidagi ${count} ta darsni tozalaysizmi? (Qulflangan darslar tegilmaydi)`)) return
     commit(entries.filter((e) => e.classId !== cls.id || e.locked))
   }
-  const clearAll = () => commit(entries.filter((e) => e.locked))
+  const clearAll = () => {
+    const count = entries.filter((e) => !e.locked).length
+    if (count === 0) return
+    if (!window.confirm(`Barcha ${count} ta darsni tozalaysizmi? Bu amal qaytarib bo'lmaydi (lekin qulflangan darslar tegilmaydi).`)) return
+    commit(entries.filter((e) => e.locked))
+  }
 
   // Bo'sh varaq — joriy jadvalni nomli versiyaga nusxalab, ishchi varaqni tozalaydi
   const blankSheet = () => {
@@ -396,21 +406,21 @@ export function TimetableBoard() {
 
         <button onClick={autoFill} disabled={running} className="btn btn-accent h-9 disabled:opacity-50">
           {running ? <Wand2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
-          {running ? `Tuzilmoqda ${Math.round(progress)}%` : 'Avtomatik to‘ldirish'}
+          {running ? `${tr('Tuzilmoqda')} ${Math.round(progress)}%` : tr('Avtomatik to‘ldirish')}
         </button>
         {running && (
-          <button onClick={stop} className="btn btn-outline h-9 text-danger" title="To‘xtatish">
-            <StopCircle size={15} /> To‘xtatish
+          <button onClick={stop} className="btn btn-outline h-9 text-danger" title={tr('To‘xtatish')}>
+            <StopCircle size={15} /> {tr('To‘xtatish')}
           </button>
         )}
         <button
           onClick={() => setLockMode((v) => !v)}
           className={cx('btn h-9', lockMode ? 'btn-accent' : 'btn-outline')}
-          title="Qulflash rejimi — kataklarni qulflab qo'yadi"
+          title={tr("Qulflash rejimi — kataklarni qulflab qo'yadi")}
         >
-          {lockMode ? <Lock size={16} /> : <Unlock size={16} />} Qulflash
+          {lockMode ? <Lock size={16} /> : <Unlock size={16} />} {tr('Qulflash')}
         </button>
-        <div className="flex h-9 items-center gap-1 rounded-lg bg-surface-2 px-1.5" title="Hafta qatlami — qaysi haftaga dars qo'yilsin">
+        <div className="flex h-9 items-center gap-1 rounded-lg bg-surface-2 px-1.5" title={tr("Hafta qatlami — qaysi haftaga dars qo'yilsin")}>
           <Layers size={15} className="text-muted" />
           {(['all', 'num', 'den'] as WeekType[]).map((w) => (
             <button
@@ -422,7 +432,7 @@ export function TimetableBoard() {
               )}
               title={WEEK_LABEL[w]}
             >
-              {w === 'all' ? 'Butun' : w === 'num' ? '1-hafta' : '2-hafta'}
+              {w === 'all' ? tr('Butun') : w === 'num' ? tr('1-hafta') : tr('2-hafta')}
             </button>
           ))}
         </div>
@@ -431,7 +441,7 @@ export function TimetableBoard() {
             onClick={undo}
             disabled={past.length === 0}
             className="btn btn-ghost h-9 w-9 p-0 disabled:opacity-40"
-            title="Orqaga qaytarish (Ctrl+Z)"
+            title={tr('Orqaga qaytarish (Ctrl+Z)')}
           >
             <Undo2 size={16} />
           </button>
@@ -439,19 +449,19 @@ export function TimetableBoard() {
             onClick={redo}
             disabled={future.length === 0}
             className="btn btn-ghost h-9 w-9 p-0 disabled:opacity-40"
-            title="Oldinga qaytarish (Ctrl+Y)"
+            title={tr('Oldinga qaytarish (Ctrl+Y)')}
           >
             <Redo2 size={16} />
           </button>
         </div>
-        <button onClick={blankSheet} className="btn btn-outline h-9" title="Joriy jadvalni nusxaga saqlab, bo'sh varaqdan boshlash">
-          <FilePlus size={16} /> Bo'sh varaq
+        <button onClick={blankSheet} className="btn btn-outline h-9" title={tr("Joriy jadvalni nusxaga saqlab, bo'sh varaqdan boshlash")}>
+          <FilePlus size={16} /> {tr("Bo'sh varaq")}
         </button>
         <button onClick={clearClass} className="btn btn-outline h-9">
-          <Eraser size={16} /> Sinfni tozalash
+          <Eraser size={16} /> {tr('Sinfni tozalash')}
         </button>
         <button onClick={clearAll} className="btn btn-outline h-9 text-danger">
-          <Trash2 size={16} /> Hammasini tozalash
+          <Trash2 size={16} /> {tr('Hammasini tozalash')}
         </button>
 
         {running && (

@@ -16,6 +16,7 @@ import {
   ShoppingBag,
 } from 'lucide-react'
 import { OwnerLoginModal } from '@/features/auth/AuthScreens'
+import { BackgroundSlideshow } from '@/components/BackgroundSlideshow'
 import { useAuth } from '@/store/auth'
 import { useToast } from '@/store/toast'
 import { telegramUrl } from '@/utils'
@@ -60,12 +61,14 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
 
   return (
     <div className="fixed inset-0 overflow-y-auto bg-bg">
+      {/* Jadval mavzusidagi orqa fon — 4 scena aylanib turadi */}
+      <BackgroundSlideshow opacity={0.3} />
       {/* Animatsiyali orqa fon */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="blob animate-floatA h-80 w-80 bg-accent/40" style={{ top: '-4rem', left: '-3rem' }} />
-        <div className="blob animate-floatB h-96 w-96" style={{ top: '20%', right: '-6rem', background: 'rgb(236 72 153 / 0.28)' }} />
-        <div className="blob animate-floatC h-72 w-72" style={{ bottom: '-4rem', left: '25%', background: 'rgb(16 185 129 / 0.26)' }} />
-        <div className="blob animate-floatA h-64 w-64 bg-accent/30" style={{ bottom: '10%', right: '15%' }} />
+        <div className="blob animate-floatA h-80 w-80 bg-accent/30" style={{ top: '-4rem', left: '-3rem' }} />
+        <div className="blob animate-floatB h-96 w-96" style={{ top: '20%', right: '-6rem', background: 'rgb(236 72 153 / 0.2)' }} />
+        <div className="blob animate-floatC h-72 w-72" style={{ bottom: '-4rem', left: '25%', background: 'rgb(16 185 129 / 0.18)' }} />
+        <div className="blob animate-floatA h-64 w-64 bg-accent/25" style={{ bottom: '10%', right: '15%' }} />
       </div>
 
       <div className="relative z-10">

@@ -3,7 +3,7 @@ import { useProject } from '@/store/project'
 import { useToast } from '@/store/toast'
 import { CrudModule } from '@/features/_shared/CrudModule'
 import { AvailabilityGrid } from '@/components/AvailabilityGrid'
-import { Field, TextField, NumberField, SelectField } from '@/components/Field'
+import { Field, TextField, SelectField } from '@/components/Field'
 import { subjectLoad } from '@/features/_shared/compute'
 import { exportListToExcel } from '@/io/excel'
 import { AvailabilityBar } from '@/components/AvailabilityBar'
@@ -34,7 +34,6 @@ export function SubjectsPage() {
       ),
     },
     { key: 'short', header: 'Qisqacha', render: (r) => r.short },
-    { key: 'weight', header: "Og'irlik", align: 'center', render: (r) => r.weight },
     { key: 'load', header: 'Yuklama', align: 'center', render: (r) => subjectLoad(r.id, lessons) },
     { key: 'avail', header: 'Ish vaqti', align: 'center', render: (r) => <AvailabilityBar value={r.availability} /> },
   ]
@@ -54,8 +53,8 @@ export function SubjectsPage() {
       onExport={() =>
         exportListToExcel(
           'Fanlar',
-          ['#', 'Fan nomi', 'Qisqacha', "Og'irlik", 'Yuklama'],
-          project.subjects.map((s, i) => [i + 1, s.name, s.short, s.weight, subjectLoad(s.id, lessons)]),
+          ['#', 'Fan nomi', 'Qisqacha', 'Yuklama'],
+          project.subjects.map((s, i) => [i + 1, s.name, s.short, subjectLoad(s.id, lessons)]),
         )
       }
       footerSummary={(rows) => (
@@ -85,9 +84,6 @@ export function SubjectsPage() {
           </Field>
           <Field label="Qisqacha">
             <TextField value={d.short} onChange={(e) => set({ short: e.target.value })} placeholder="Mat" />
-          </Field>
-          <Field label="Og'irlik (qiyinlik 1–10)" hint="SanPiN bo'yicha taqsimot uchun">
-            <NumberField value={d.weight} min={1} max={10} onChange={(e) => set({ weight: +e.target.value })} />
           </Field>
           <Field label="Talab qilinadigan xona turi">
             <SelectField value={d.requiredRoomType ?? ''} onChange={(e) => set({ requiredRoomType: e.target.value || undefined })}>

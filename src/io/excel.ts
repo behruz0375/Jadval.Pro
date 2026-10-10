@@ -20,14 +20,21 @@ export async function exportDataToExcel(project: Project) {
 
   // Sinflar
   add(XLSX, wb,'Sinflar', [
-    ['#', 'Sinf nomi', 'Qisqacha', "O'quvchi", 'Navbat', 'Bino'],
-    ...classes.map((c, i) => [i + 1, c.name, c.short, c.studentCount, c.shiftIndex, c.building]),
+    ['#', 'Sinf nomi', 'Qisqacha', 'Navbat', 'Sinf rahbari', 'Bino'],
+    ...classes.map((c, i) => [
+      i + 1,
+      c.name,
+      c.short,
+      c.shiftIndex,
+      teacherName(c.classTeacherId),
+      c.building,
+    ]),
   ])
 
   // Fanlar
   add(XLSX, wb,'Fanlar', [
-    ['#', 'Fan nomi', 'Qisqacha', "Og'irlik"],
-    ...subjects.map((s, i) => [i + 1, s.name, s.short, s.weight]),
+    ['#', 'Fan nomi', 'Qisqacha'],
+    ...subjects.map((s, i) => [i + 1, s.name, s.short]),
   ])
 
   // Xonalar
@@ -38,11 +45,10 @@ export async function exportDataToExcel(project: Project) {
 
   // O'qituvchilar
   add(XLSX, wb,"O'qituvchilar", [
-    ['#', 'F.I.Sh.', 'Telefon', 'Metodik kun', 'Kunlik sig\'im', 'Haftalik norma'],
+    ['#', 'F.I.Sh.', 'Metodik kun', 'Kunlik sig\'im', 'Haftalik norma'],
     ...teachers.map((t, i) => [
       i + 1,
       t.fullName,
-      t.phone,
       t.methodicalDay >= 0 ? DAYS_UZ[t.methodicalDay] : '—',
       t.dailyCapacity,
       t.weeklyMax,

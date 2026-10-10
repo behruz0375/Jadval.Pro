@@ -155,7 +155,7 @@ export function ReportsPage() {
                 <tr className="text-left text-muted">
                   <th className="border-b border-border px-3 py-2 font-semibold">Sinf</th>
                   <th className="border-b border-border px-3 py-2 text-center font-semibold">Navbat</th>
-                  <th className="border-b border-border px-3 py-2 text-right font-semibold">O'quvchi</th>
+                  <th className="border-b border-border px-3 py-2 font-semibold">Sinf rahbari</th>
                   <th className="border-b border-border px-3 py-2 text-right font-semibold">Haftalik soat</th>
                   <th className="border-b border-border px-3 py-2 text-right font-semibold">Bandlik</th>
                 </tr>
@@ -165,7 +165,9 @@ export function ReportsPage() {
                   <tr key={c.id} className="border-b border-border/60">
                     <td className="px-3 py-2 font-medium">{c.name}</td>
                     <td className="px-3 py-2 text-center">{c.shiftIndex}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{c.studentCount}</td>
+                    <td className="px-3 py-2 text-muted">
+                      {teachers.find((t) => t.id === c.classTeacherId)?.short ?? '—'}
+                    </td>
                     <td className="px-3 py-2 text-right tabular-nums">{load}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-muted">
                       {capacity ? `${((load / capacity) * 100).toFixed(0)}%` : '—'}

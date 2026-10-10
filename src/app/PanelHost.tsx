@@ -21,6 +21,7 @@ import { SubstitutionPage } from '@/features/substitution/SubstitutionPage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { ListsPage } from '@/features/lists/ListsPage'
+import { AIAssistantPage } from '@/features/ai/AIAssistantPage'
 
 export function PanelHost() {
   const activePanel = useUI((s) => s.activePanel)
@@ -67,6 +68,8 @@ export function PanelHost() {
       return <ReportsPage />
     case 'settings':
       return <SettingsPage />
+    case 'ai':
+      return <AIAssistantPage />
     default:
       return <Placeholder title={def?.label ?? 'Modul'} icon={def?.icon} />
   }

@@ -71,6 +71,8 @@ export interface SchoolClass {
   shiftIndex: number // 1..3
   building: string
   homeRoomId?: string
+  /** Sinf rahbari — teacherId (ixtiyoriy) */
+  classTeacherId?: string
   availability: AvailabilityMatrix
 }
 

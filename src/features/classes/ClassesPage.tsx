@@ -5,7 +5,7 @@ import { useAuth } from '@/store/auth'
 import { useToast } from '@/store/toast'
 import { CrudModule } from '@/features/_shared/CrudModule'
 import { AvailabilityGrid } from '@/components/AvailabilityGrid'
-import { Field, TextField, NumberField, SelectField } from '@/components/Field'
+import { Field, TextField, SelectField } from '@/components/Field'
 import { classLoad } from '@/features/_shared/compute'
 import { exportListToExcel } from '@/io/excel'
 import { importClassesFromExcel } from '@/io/importLists'
@@ -23,7 +23,8 @@ export function ClassesPage() {
   const applyAvailabilityToAll = useProject((s) => s.applyAvailabilityToAll)
   const toast = useToast()
   const planLimit = useAuth((s) => s.planLimit)
-  const { school, lessons, rooms } = project
+  const { school, lessons, rooms, teachers } = project
+  const teacherName = (id?: string) => teachers.find((t) => t.id === id)?.short ?? '—'
 
   const guardedAdd = (c: SchoolClass) => {
     const lim = planLimit('classes')
@@ -54,8 +55,8 @@ export function ClassesPage() {
     { key: 'n', header: '#', width: 44, align: 'center', render: (_r, i) => <span className="text-muted">{i + 1}</span> },
     { key: 'name', header: 'Sinf nomi', render: (r) => <b>{r.name}</b> },
     { key: 'short', header: 'Qisqacha', render: (r) => r.short },
-    { key: 'students', header: "O'quvchi", align: 'center', render: (r) => r.studentCount },
     { key: 'shift', header: 'Navbat', align: 'center', render: (r) => `${r.shiftIndex}-navbat` },
+    { key: 'advisor', header: 'Sinf rahbari', render: (r) => <span className="text-muted">{teacherName(r.classTeacherId)}</span> },
     { key: 'load', header: 'Yuklama', align: 'center', render: (r) => classLoad(r.id, lessons) },
     { key: 'avail', header: 'Ish vaqti', align: 'center', render: (r) => <AvailabilityBar value={r.availability} /> },
     { key: 'building', header: 'Bino', render: (r) => r.building },
@@ -76,8 +77,16 @@ export function ClassesPage() {
       onExport={() =>
         exportListToExcel(
           'Sinflar',
-          ['#', 'Sinf nomi', 'Qisqacha', "O'quvchi", 'Navbat', 'Yuklama', 'Bino'],
-          project.classes.map((c, i) => [i + 1, c.name, c.short, c.studentCount, c.shiftIndex, classLoad(c.id, lessons), c.building]),
+          ['#', 'Sinf nomi', 'Qisqacha', 'Navbat', 'Sinf rahbari', 'Yuklama', 'Bino'],
+          project.classes.map((c, i) => [
+            i + 1,
+            c.name,
+            c.short,
+            c.shiftIndex,
+            teachers.find((t) => t.id === c.classTeacherId)?.fullName ?? '',
+            classLoad(c.id, lessons),
+            c.building,
+          ]),
         )
       }
       footerSummary={(rows) => (
@@ -109,9 +118,6 @@ export function ClassesPage() {
           <Field label="Qisqacha">
             <TextField value={d.short} onChange={(e) => set({ short: e.target.value })} placeholder="5A" />
           </Field>
-          <Field label="O'quvchilar soni">
-            <NumberField value={d.studentCount} min={1} onChange={(e) => set({ studentCount: +e.target.value })} />
-          </Field>
           <Field label="Navbat">
             <SelectField value={d.shiftIndex} onChange={(e) => set({ shiftIndex: +e.target.value })}>
               <option value={1}>1-navbat</option>
@@ -139,6 +145,19 @@ export function ClassesPage() {
               {rooms.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
+                </option>
+              ))}
+            </SelectField>
+          </Field>
+          <Field label="Sinf rahbari (ixtiyoriy)" className="sm:col-span-2">
+            <SelectField
+              value={d.classTeacherId ?? ''}
+              onChange={(e) => set({ classTeacherId: e.target.value || undefined })}
+            >
+              <option value="">— tanlanmagan —</option>
+              {teachers.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.fullName}
                 </option>
               ))}
             </SelectField>

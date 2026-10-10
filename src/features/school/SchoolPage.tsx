@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { School as SchoolIcon, Clock, Wand2, Bell, Upload, X, Image as ImageIcon, Building2, Plus, Trash2 } from 'lucide-react'
 import { useProject } from '@/store/project'
 import { useToast } from '@/store/toast'
@@ -7,7 +7,24 @@ import { Field, TextField, SelectField, NumberField } from '@/components/Field'
 import { generateLessonTimes, fillShiftTimes } from '@/data/factories'
 import { useT } from '@/i18n'
 import { cx, uid } from '@/utils'
-import type { Shift, Building } from '@/types'
+import type { Shift, Building, AvailabilityMatrix } from '@/types'
+
+// shift.grid[lesson][day] → AvailabilityGrid uchun [day][lesson]
+function transposeShiftGrid(grid: boolean[][], workDays: number): AvailabilityMatrix {
+  const lessons = grid.length
+  return Array.from({ length: workDays }, (_, d) =>
+    Array.from({ length: lessons }, (_, l) => grid[l]?.[d] ?? false),
+  )
+}
+
+// AvailabilityGrid [day][lesson] → shift.grid [lesson][day]
+function transposeDayLessonToLessonDay(mat: AvailabilityMatrix): boolean[][] {
+  const days = mat.length
+  const lessons = mat[0]?.length ?? 0
+  return Array.from({ length: lessons }, (_, l) =>
+    Array.from({ length: days }, (_, d) => mat[d]?.[l] ?? false),
+  )
+}
 
 export function SchoolPage() {
   const school = useProject((s) => s.project.school)
@@ -54,8 +71,43 @@ export function SchoolPage() {
     updateSchool({ shifts })
   }
 
+  // Yangi navbat qo'shish — oxirgi navbatdan keyin boshlanadi
+  const addShift = () => {
+    const last = school.shifts[school.shifts.length - 1]
+    const nextStart = (last?.startLesson ?? 1) + (last?.lessonCount ?? 0)
+    const newIdx = school.shifts.length + 1
+    const lessonCount = 7
+    const newShift: Shift = {
+      index: newIdx,
+      startLesson: nextStart,
+      lessonCount,
+      grid: Array.from({ length: lessonCount }, () => new Array(school.workDays).fill(true)),
+    }
+    const shifts = [...school.shifts, newShift]
+    updateSchool({ shifts, maxLessonsPerDay: Math.max(school.maxLessonsPerDay, nextStart + lessonCount - 1) })
+    setTab(newIdx - 1)
+    toast.success(`${newIdx}-navbat qo'shildi`)
+  }
+
+  // Navbatni o'chirish — kamida 1 ta navbat qolishi kerak
+  const removeShift = (idx: number) => {
+    if (school.shifts.length <= 1) {
+      toast.error("Kamida 1 ta navbat bo'lishi kerak")
+      return
+    }
+    const shifts = school.shifts.filter((_, i) => i !== idx).map((s, i) => ({ ...s, index: i + 1 }))
+    updateSchool({ shifts })
+    if (tab >= shifts.length) setTab(shifts.length - 1)
+    toast.success(`${idx + 1}-navbat o'chirildi`)
+  }
+
+  // Agar tab tashqarida qolib ketsa — birinchi navbatga qaytarish
+  useEffect(() => {
+    if (tab >= school.shifts.length) setTab(0)
+  }, [tab, school.shifts.length])
+
   const shift = school.shifts[tab]
-  const shiftTotal = shift.grid.reduce((a, row) => a + row.filter(Boolean).length, 0)
+  const shiftTotal = shift?.grid?.reduce((a, row) => a + row.filter(Boolean).length, 0) ?? 0
 
   const bell = {
     lessonMin: school.lessonMin ?? 45,
@@ -186,7 +238,7 @@ export function SchoolPage() {
         {/* Navbatlar */}
         <section className="card p-5">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-semibold">Navbatlar</h2>
+            <h2 className="font-semibold">Navbatlar ({school.shifts.length} ta)</h2>
             <span className="chip">Jami: {shiftTotal} ta</span>
           </div>
 
@@ -196,58 +248,86 @@ export function SchoolPage() {
                 key={i}
                 onClick={() => setTab(i)}
                 className={cx(
-                  'flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                  'group flex flex-1 items-center justify-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
                   tab === i ? 'bg-accent text-accent-fg' : 'text-muted hover:text-ink',
                 )}
               >
-                {i + 1}-Navbat
+                <span>{i + 1}-Navbat</span>
+                {school.shifts.length > 1 && (
+                  <span
+                    role="button"
+                    onClick={(e) => { e.stopPropagation(); removeShift(i) }}
+                    className={cx(
+                      'ml-1 grid h-4 w-4 shrink-0 cursor-pointer place-items-center rounded-full opacity-60 hover:bg-black/10 hover:opacity-100',
+                      tab === i ? 'hover:bg-white/20' : '',
+                    )}
+                    title={`${i + 1}-navbatni o'chirish`}
+                  >
+                    <X size={10} />
+                  </span>
+                )}
               </button>
             ))}
-          </div>
-
-          <div className="mb-3 grid grid-cols-2 gap-3">
-            <Field label="Boshlanishi (dars)">
-              <input
-                type="number"
-                min={1}
-                max={16}
-                value={shift.startLesson}
-                onChange={(e) => setShift(tab, { startLesson: +e.target.value })}
-                className="input"
-              />
-            </Field>
-            <Field label="Dars soni">
-              <input
-                type="number"
-                min={0}
-                max={16}
-                value={shift.lessonCount}
-                onChange={(e) => setShift(tab, { lessonCount: +e.target.value })}
-                className="input"
-              />
-            </Field>
-          </div>
-
-          <div className="mb-3 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-surface-2/50 p-2.5">
-            <Field label="Navbat boshlanish vaqti">
-              <input
-                key={tab}
-                ref={shiftStartRef}
-                type="time"
-                defaultValue={school.lessonTimes[shift.startLesson - 1]?.start || '08:00'}
-                className="input h-9"
-              />
-            </Field>
-            <button onClick={fillThisShift} className="btn btn-outline h-9" title="Shu navbat darslari uchun qo'ng'iroq vaqtlarini to'ldirish">
-              <Bell size={15} /> Qo'ng'iroqni to'ldirish
+            <button
+              onClick={addShift}
+              className="flex shrink-0 items-center gap-1 rounded-md border border-dashed border-border bg-surface px-3 py-1.5 text-sm font-medium text-muted hover:border-accent/50 hover:bg-accent/5 hover:text-accent"
+              title="Yangi navbat qo'shish"
+            >
+              <Plus size={14} /> Navbat
             </button>
           </div>
 
-          <AvailabilityGrid
-            value={shift.grid}
-            onChange={(v) => setShift(tab, { grid: v })}
-            workDays={school.workDays}
-          />
+          {!shift ? (
+            <div className="rounded-lg border border-dashed border-border bg-surface-2/40 p-6 text-center text-sm text-muted">
+              Hech qanday navbat yo'q. «+ Navbat» tugmasini bosib qo'shing.
+            </div>
+          ) : (
+            <>
+              <div className="mb-3 grid grid-cols-2 gap-3">
+                <Field label="Boshlanishi (dars)">
+                  <input
+                    type="number"
+                    min={1}
+                    max={16}
+                    value={shift.startLesson}
+                    onChange={(e) => setShift(tab, { startLesson: +e.target.value })}
+                    className="input"
+                  />
+                </Field>
+                <Field label="Dars soni">
+                  <input
+                    type="number"
+                    min={0}
+                    max={16}
+                    value={shift.lessonCount}
+                    onChange={(e) => setShift(tab, { lessonCount: +e.target.value })}
+                    className="input"
+                  />
+                </Field>
+              </div>
+
+              <div className="mb-3 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-surface-2/50 p-2.5">
+                <Field label="Navbat boshlanish vaqti">
+                  <input
+                    key={tab}
+                    ref={shiftStartRef}
+                    type="time"
+                    defaultValue={school.lessonTimes[shift.startLesson - 1]?.start || '08:00'}
+                    className="input h-9"
+                  />
+                </Field>
+                <button onClick={fillThisShift} className="btn btn-outline h-9" title="Shu navbat darslari uchun qo'ng'iroq vaqtlarini to'ldirish">
+                  <Bell size={15} /> Qo'ng'iroqni to'ldirish
+                </button>
+              </div>
+
+              <AvailabilityGrid
+                value={transposeShiftGrid(shift.grid, school.workDays)}
+                onChange={(v) => setShift(tab, { grid: transposeDayLessonToLessonDay(v) })}
+                workDays={school.workDays}
+              />
+            </>
+          )}
         </section>
       </div>
 

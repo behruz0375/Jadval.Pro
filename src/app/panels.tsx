@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   UserCog,
   ListChecks,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '@/types'
@@ -46,6 +47,8 @@ export const PANEL_GROUPS: PanelGroup[] = [
     panels: [
       { id: 'owner', label: 'Boshqaruv paneli', icon: ShieldCheck, roles: ['owner'] },
       { id: 'dashboard', label: 'Bosh sahifa', icon: LayoutDashboard, roles: BOTH },
+      { id: 'distribution', label: 'Taqsimot', icon: LayoutGrid, roles: BOTH },
+      { id: 'ai', label: 'AI yordamchi', icon: Sparkles, roles: SCHOOL },
     ],
   },
   {
@@ -78,7 +81,6 @@ export const PANEL_GROUPS: PanelGroup[] = [
   {
     id: 'schedule',
     panels: [
-      { id: 'distribution', label: 'Taqsimot', icon: LayoutGrid, roles: BOTH },
       { id: 'views', label: "Jadval ko'rinishlari", icon: CalendarRange, roles: BOTH },
       { id: 'conflicts', label: 'Konfliktlar', icon: AlertTriangle, roles: BOTH },
     ],

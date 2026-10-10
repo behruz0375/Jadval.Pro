@@ -5,6 +5,7 @@ import { useAuth } from '@/store/auth'
 import { useToast } from '@/store/toast'
 import { buildDemoProject } from '@/data/seed'
 import { openProjectFromFile } from '@/io/projectFile'
+import { useT } from '@/i18n'
 import type { LucideIcon } from 'lucide-react'
 
 export function WelcomeLauncher({ onClose }: { onClose: () => void }) {
@@ -14,13 +15,14 @@ export function WelcomeLauncher({ onClose }: { onClose: () => void }) {
   const setActivePanel = useUI((s) => s.setActivePanel)
   const role = useAuth((s) => s.role)
   const toast = useToast()
+  const t = useT()
 
   const hasData = project.classes.length > 0 || project.lessons.length > 0
 
   const doNew = () => {
-    if (hasData && !window.confirm("Yangi jadval? Joriy ma'lumotlar o'rniga bo'sh loyiha ochiladi.")) return
+    if (hasData && !window.confirm(t("Yangi jadval? Joriy ma'lumotlar o'rniga bo'sh loyiha ochiladi."))) return
     newProject()
-    toast.success('Yangi loyiha yaratildi')
+    toast.success(t('Yangi loyiha yaratildi'))
     onClose()
   }
   const doOpen = async () => {
@@ -28,7 +30,7 @@ export function WelcomeLauncher({ onClose }: { onClose: () => void }) {
       const p = await openProjectFromFile()
       if (!p) return
       setProject(p)
-      toast.success('Loyiha ochildi')
+      toast.success(t('Loyiha ochildi'))
       onClose()
     } catch (e) {
       toast.error((e as Error).message)
@@ -37,7 +39,7 @@ export function WelcomeLauncher({ onClose }: { onClose: () => void }) {
   const doDemo = () => {
     newProject()
     setProject(buildDemoProject())
-    toast.success("Namuna ma'lumotlar yuklandi")
+    toast.success(t("Namuna ma'lumotlar yuklandi"))
     onClose()
   }
   const doLicense = () => {
@@ -46,11 +48,11 @@ export function WelcomeLauncher({ onClose }: { onClose: () => void }) {
   }
 
   const tiles: { icon: LucideIcon; title: string; desc: string; color: string; onClick: () => void; primary?: boolean }[] = [
-    { icon: FilePlus2, title: 'Yangi jadval yaratish', desc: "Bo'sh loyihadan boshlash", color: '#4457d6', onClick: doNew, primary: true },
-    { icon: FolderOpen, title: 'Saqlangan jadvalni ochish', desc: '.jadval faylni yuklash', color: '#f97316', onClick: doOpen },
-    { icon: ArrowRightCircle, title: 'Oxirgi bilan davom etish', desc: 'Joriy loyihani davom ettirish', color: '#22c55e', onClick: onClose },
-    { icon: Sparkles, title: "Namuna ma'lumot", desc: 'Sinov uchun tayyor maktab', color: '#a855f7', onClick: doDemo },
-    { icon: KeyRound, title: role === 'owner' ? 'Boshqaruv paneli' : "Dastur ma'lumoti", desc: role === 'owner' ? 'Mijozlar va login/parollar' : 'Dastur va aloqa', color: '#14b8a6', onClick: doLicense },
+    { icon: FilePlus2, title: t('Yangi jadval yaratish'), desc: t("Bo'sh loyihadan boshlash"), color: '#4457d6', onClick: doNew, primary: true },
+    { icon: FolderOpen, title: t('Saqlangan jadvalni ochish'), desc: t('.jadval faylni yuklash'), color: '#f97316', onClick: doOpen },
+    { icon: ArrowRightCircle, title: t('Oxirgi bilan davom etish'), desc: t('Joriy loyihani davom ettirish'), color: '#22c55e', onClick: onClose },
+    { icon: Sparkles, title: t("Namuna ma'lumot"), desc: t('Sinov uchun tayyor maktab'), color: '#a855f7', onClick: doDemo },
+    { icon: KeyRound, title: role === 'owner' ? t('Boshqaruv paneli') : t("Dastur ma'lumoti"), desc: role === 'owner' ? t('Mijozlar va login/parollar') : t('Dastur va aloqa'), color: '#14b8a6', onClick: doLicense },
   ]
 
   return (
@@ -62,7 +64,7 @@ export function WelcomeLauncher({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="modal-pop relative z-10 w-full max-w-3xl rounded-2xl border border-border bg-surface/90 p-6 shadow-panel backdrop-blur sm:p-8">
-        <button onClick={onClose} className="btn btn-ghost absolute right-3 top-3 h-8 w-8 p-0" title="Yopish">
+        <button onClick={onClose} className="btn btn-ghost absolute right-3 top-3 h-8 w-8 p-0" title={t('Yopish')}>
           <X size={18} />
         </button>
 
@@ -72,9 +74,9 @@ export function WelcomeLauncher({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <h1 className="text-xl font-bold">
-              JadvalPro — <span className="text-gradient">xush kelibsiz!</span>
+              JadvalPro — <span className="text-gradient">{t('xush kelibsiz!')}</span>
             </h1>
-            <p className="text-sm text-muted">Nimadan boshlaymiz?</p>
+            <p className="text-sm text-muted">{t('Nimadan boshlaymiz?')}</p>
           </div>
         </div>
 

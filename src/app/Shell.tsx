@@ -66,8 +66,12 @@ export function Shell() {
   const label = findPanel(activePanel)?.label ?? ''
   const isHome = activePanel === home
 
+  // Mobil brauzerda `100vh` adres paneli bilan noto'g'ri ishlaydi — `100dvh` dinamik
+  // viewport ishlatiladi. Zoom = 100 bo'lsa — hech qanday CSS zoom qo'llanilmaydi
+  // (ba'zi mobil brauzerlarda zoom scroll'ni buzadi).
+  const applyZoom = zoom !== 100
   return (
-    <div className="flex h-screen flex-col bg-bg">
+    <div className="jadvalpro-shell flex flex-col bg-bg" style={{ height: '100dvh' }}>
       <TopBar />
       <div className="flex min-h-0 flex-1">
         <Sidebar />
@@ -91,10 +95,17 @@ export function Shell() {
             <span className="text-sm font-medium">{t(label)}</span>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-auto">
-            <div style={{ zoom: zoom / 100 }} className="h-full">
+          <div
+            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
+            style={{ WebkitOverflowScrolling: 'touch' }}
+          >
+            {applyZoom ? (
+              <div style={{ zoom: zoom / 100 }}>
+                <PanelHost />
+              </div>
+            ) : (
               <PanelHost />
-            </div>
+            )}
           </div>
         </main>
       </div>

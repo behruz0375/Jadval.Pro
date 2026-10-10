@@ -15,7 +15,8 @@ import { APP_VERSION, FILE_VERSION, MAX_LESSONS, DEFAULT_LESSON_MIN, DEFAULT_BRE
 import { uid, minToTime, timeToMin, fullAvailability } from '@/utils'
 
 export const DEFAULT_WORK_DAYS = 6
-export const DEFAULT_MAX_LESSONS_PER_DAY = 7
+/** Standart kuniga maksimal dars soni: 2 navbat × 7 dars = 14 (1234567 1234567). */
+export const DEFAULT_MAX_LESSONS_PER_DAY = 14
 
 /** Dars vaqtlarini avtomatik generatsiya qilish (katta tanaffus bilan) */
 export function generateLessonTimes(
@@ -75,10 +76,11 @@ function makeShiftGrid(startLesson: number, lessonCount: number, workDays: numbe
 }
 
 export function defaultShifts(workDays = DEFAULT_WORK_DAYS): Shift[] {
+  // Standart — 2 ta navbat × 7 dars (1234567 va 1234567).
+  // Qo'shimcha navbat kerak bo'lsa — Maktab sozlamalaridan qo'shiladi.
   return [
-    { index: 1, startLesson: 1, lessonCount: 6, grid: makeShiftGrid(1, 6, workDays) },
-    { index: 2, startLesson: 7, lessonCount: 6, grid: makeShiftGrid(7, 6, workDays) },
-    { index: 3, startLesson: 1, lessonCount: 0, grid: makeShiftGrid(1, 0, workDays) },
+    { index: 1, startLesson: 1, lessonCount: 7, grid: makeShiftGrid(1, 7, workDays) },
+    { index: 2, startLesson: 8, lessonCount: 7, grid: makeShiftGrid(8, 7, workDays) },
   ]
 }
 
@@ -178,6 +180,7 @@ export function newTeacher(school: School, fullName = ''): Teacher {
 }
 
 export function newLesson(school: School): Lesson {
+  void school
   return {
     id: uid('les_'),
     subjectId: '',
@@ -185,7 +188,7 @@ export function newLesson(school: School): Lesson {
     teacher1Id: '',
     hoursPerWeek: 1,
     consecutive: false,
-    maxPerDay: 1,
+    maxPerDay: 0, // 0 = cheksiz — dastur avtomatik tarqatadi (maxLessonsPerDay bilan cheklangan)
     pinned: [],
   }
 }
@@ -217,9 +220,41 @@ export function defaultProject(): Project {
 }
 
 /** SUB-COMMANDS: sinf nomlari generatori "1-A..4-B" uchun (kelgusi) */
-export const SUBJECT_PRESETS = [
-  'Ona tili', 'Adabiyot', 'Matematika', 'Algebra', 'Geometriya', 'Fizika',
-  'Kimyo', 'Biologiya', 'Geografiya', 'Tarix', 'Ingliz tili', 'Rus tili',
-  'Informatika', 'Jismoniy tarbiya', 'Chizmachilik', 'Tasviriy san\'at',
-  'Musiqa', 'Tarbiya', 'Texnologiya', 'Huquq',
-]
+/** Fan guruhlari — Oʻzbekiston maktab o'quv rejasiga mos */
+export const SUBJECT_GROUPS = {
+  aniq: {
+    label: 'Aniq fanlar',
+    subjects: ['Matematika', 'Algebra', 'Geometriya', 'Fizika', 'Astronomiya', 'Informatika', 'Dasturlash'],
+  },
+  tabiiy: {
+    label: 'Tabiiy fanlar',
+    subjects: ['Kimyo', 'Biologiya', 'Geografiya', 'Tabiatshunoslik', 'Ekologiya'],
+  },
+  ijtimoiy: {
+    label: 'Ijtimoiy-gumanitar fanlar',
+    subjects: [
+      'Tarix', "Jahon tarixi", "O'zbekiston tarixi", 'Huquq',
+      'Konstitutsiya asoslari', 'Vatan tuyg‘usi', 'Odobnoma',
+      'Milliy g‘oya', 'Iqtisod asoslari', 'Diniy tarbiya',
+    ],
+  },
+  'til-adabiyot': {
+    label: 'Til va adabiyot',
+    subjects: [
+      'Ona tili', 'Adabiyot', 'O‘zbek tili va adabiyoti',
+      'Rus tili', 'Ingliz tili', 'Nemis tili', 'Fransuz tili', 'Arab tili', 'Koreys tili',
+    ],
+  },
+  'etik-estetik': {
+    label: 'Etik-estetik fanlar',
+    subjects: [
+      'Musiqa', 'Tasviriy san‘at', 'Chizmachilik',
+      'Jismoniy tarbiya', 'Mehnat ta‘limi', 'Texnologiya',
+      'Dizayn asoslari', 'Teatr', 'Xoreografiya',
+    ],
+  },
+} as const
+
+export const SUBJECT_PRESETS: readonly string[] = Object.values(SUBJECT_GROUPS)
+  .flatMap((g) => g.subjects)
+  .filter((v, i, a) => a.indexOf(v) === i)

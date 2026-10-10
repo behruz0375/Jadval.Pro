@@ -103,12 +103,11 @@ export function TeachersPage() {
       onExport={() =>
         exportListToExcel(
           "O'qituvchilar",
-          ['#', 'F.I.Sh.', 'Qisqacha', 'Telefon', 'Fanlari', 'Metodik kun', "Kunlik sig'im", 'Haftalik norma', 'Yuklama'],
+          ['#', 'F.I.Sh.', 'Qisqacha', 'Fanlari', 'Metodik kun', "Kunlik sig'im", 'Haftalik norma', 'Yuklama'],
           project.teachers.map((t, i) => [
             i + 1,
             t.fullName,
             t.short,
-            t.phone,
             subjName(t.subjectIds),
             t.methodicalDay >= 0 ? DAYS_UZ[t.methodicalDay] : '—',
             t.dailyCapacity,
@@ -132,7 +131,7 @@ export function TeachersPage() {
       formWidth="max-w-3xl"
       renderForm={(d, set) => (
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="F.I.Sh." className="sm:col-span-2">
+          <Field label="F.I.Sh." className="sm:col-span-2" hint={d.short ? `Qisqacha: ${d.short}` : undefined}>
             <TextField
               value={d.fullName}
               onChange={(e) => set({ fullName: e.target.value, short: shortName(e.target.value) })}
@@ -140,15 +139,9 @@ export function TeachersPage() {
               autoFocus
             />
           </Field>
-          <Field label="Qisqacha">
-            <TextField value={d.short} onChange={(e) => set({ short: e.target.value })} placeholder="Aliyev V.A." />
-          </Field>
-          <Field label="Telefon">
-            <TextField value={d.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="+998 90 123 45 67" />
-          </Field>
-          <Field label="Metodik kun" hint="Dars qo'yilmaydigan kun">
+          <Field label="Metodik kun" hint="Tanlangan bo'lsa — dastur avtomatik ravishda shu kunga dars qo'ymaydi">
             <SelectField value={d.methodicalDay} onChange={(e) => set({ methodicalDay: +e.target.value })}>
-              <option value={-1}>— yo'q —</option>
+              <option value={-1}>— yo'q (tanlanmagan) —</option>
               {DAYS_UZ.slice(0, school.workDays).map((day, i) => (
                 <option key={day} value={i}>
                   {day}

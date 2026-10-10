@@ -20,6 +20,11 @@ export interface GenerateOptions {
   morningWeight?: number // og'ir fanni ertalabga surish, standart 2
   /** Qancha urinish qilish: har urinishda yangi seed, eng yaxshisi saqlanadi (standart 1) */
   restarts?: number
+  /** Har sinf uchun kuniga maksimal dars (standart 6). Oshsa dars qo'yilmaydi. */
+  maxLessonsPerClassDay?: number
+  /** Avtomatik relaksatsiya — unplaced > 0 bo'lsa, cheklovlarni yumshatib qayta urinadi.
+   *  Shu bilan deyarli 100% dars joylashadi. (standart true) */
+  autoRelax?: boolean
 }
 
 type ProgressFn = (progress: number, message: string) => void
@@ -77,26 +82,88 @@ export function generateTimetable(
   onSnapshot?: SnapshotFn,
 ): TimetableVersion {
   const restarts = Math.max(1, Math.min(10, opts.restarts ?? 1))
-  if (restarts <= 1) return generateOnce(project, opts, onProgress, onSnapshot)
+  const autoRelax = opts.autoRelax !== false // standart: yoqilgan
+
+  const score = (v: TimetableVersion) =>
+    v.stats.unplaced * 10_000 + v.stats.hardViolations * 1_000 + v.stats.softPenalty
 
   const baseSeed = opts.seed ?? Math.floor(Math.random() * 1_000_000_000)
   let best: TimetableVersion | null = null
-  const score = (v: TimetableVersion) =>
-    v.stats.unplaced * 10_000 + v.stats.hardViolations * 1_000 + v.stats.softPenalty
-  for (let i = 0; i < restarts; i++) {
-    const subProgress: ProgressFn = (p, m) => onProgress?.(
-      (i / restarts) * 100 + p / restarts,
-      `Urinish ${i + 1}/${restarts}: ${m}`,
-    )
-    const v = generateOnce(project, { ...opts, seed: baseSeed + i * 101 }, subProgress, onSnapshot)
-    if (!best || score(v) < score(best)) {
-      best = v
-      // Oraliq eng yaxshi natijani chiqaramiz
-      onSnapshot?.(best)
+
+  /** Project'ni cheklovlar bo'yicha yumshatib qaytaradi.
+   *  level 1: teacher daily/weekly +2 / +4, lesson maxPerDay +1
+   *  level 2: + methodik kunni olib tashlash (vaqtincha)
+   *  level 3: + hamma cheklov bo'shashtirilgan (oxirgi chora) */
+  const relaxProject = (p: Project, level: number): Project => {
+    if (level <= 0) return p
+    return {
+      ...p,
+      teachers: p.teachers.map((t) => ({
+        ...t,
+        dailyCapacity: t.dailyCapacity + 2 * level,
+        weeklyMax: t.weeklyMax + 4 * level,
+        methodicalDay: level >= 2 ? -1 : t.methodicalDay,
+      })),
+      lessons: p.lessons.map((l) => ({
+        ...l,
+        maxPerDay: l.maxPerDay > 0 ? Math.min(5, l.maxPerDay + level) : 0,
+      })),
     }
-    // Mukammal — davom etmaymiz
-    if (v.stats.unplaced === 0 && v.stats.hardViolations === 0) break
   }
+
+  const tryOnce = (relaxLevel: number, i: number, total: number): TimetableVersion => {
+    const sub: ProgressFn = (p, m) => onProgress?.(
+      (i / total) * 100 + p / total,
+      total > 1 ? `${i + 1}/${total}: ${relaxLevel > 0 ? '[yumshoq] ' : ''}${m}` : m,
+    )
+    const relaxed: GenerateOptions = {
+      ...opts,
+      seed: baseSeed + i * 101 + relaxLevel * 7919,
+      maxLessonsPerClassDay: (opts.maxLessonsPerClassDay ?? 6) + relaxLevel,
+      spreadWeight: Math.max(0, (opts.spreadWeight ?? 4) - relaxLevel),
+      morningWeight: Math.max(0, (opts.morningWeight ?? 2) - relaxLevel),
+    }
+    const projRelaxed = relaxProject(project, relaxLevel)
+    return generateOnce(projRelaxed, relaxed, sub, onSnapshot)
+  }
+
+  // 1-bosqich — asosiy urinishlar (restarts marta)
+  for (let i = 0; i < restarts; i++) {
+    const v = tryOnce(0, i, restarts)
+    if (!best || score(v) < score(best)) { best = v; onSnapshot?.(best) }
+    if (v.stats.unplaced === 0 && v.stats.hardViolations === 0) {
+      onProgress?.(100, 'Tayyor!')
+      return best
+    }
+  }
+
+  // 2-bosqich — avtomatik relaksatsiya (unplaced > 0 bo'lsa)
+  if (autoRelax && best && best.stats.unplaced > 0) {
+    onProgress?.(50, `${best.stats.unplaced} dars qoldi — cheklovlarni yumshatib qayta urinaman…`)
+    for (let level = 1; level <= 3 && best.stats.unplaced > 0; level++) {
+      for (let i = 0; i < 2; i++) {
+        const v = tryOnce(level, i, 2)
+        if (score(v) < score(best)) { best = v; onSnapshot?.(best) }
+        if (v.stats.unplaced === 0) break
+      }
+    }
+  }
+
+  // 3-bosqich — oxirgi chora: barcha cheklov yumshoq, project ham maksimal yumshatilgan
+  if (autoRelax && best && best.stats.unplaced > 0) {
+    onProgress?.(80, `${best.stats.unplaced} dars hali qoldi — oxirgi urinish (barcha cheklov yumshoq)…`)
+    const extremeRelaxed = relaxProject(project, 4)
+    for (let i = 0; i < 3 && best!.stats.unplaced > 0; i++) {
+      const v = generateOnce(extremeRelaxed, {
+        ...opts, seed: baseSeed + 99999 + i * 331,
+        maxLessonsPerClassDay: project.school.maxLessonsPerDay, // cheksiz
+        spreadDays: false, minimizeGaps: false,
+        spreadWeight: 0, morningWeight: 0,
+      }, undefined, onSnapshot)
+      if (score(v) < score(best!)) { best = v; onSnapshot?.(best) }
+    }
+  }
+
   onProgress?.(100, 'Tayyor!')
   return best!
 }
@@ -119,6 +186,9 @@ function generateOnce(
   const { school, classes, subjects, rooms, teachers, lessons } = project
   const days = school.workDays
   const maxP = school.maxLessonsPerDay
+  /** Har bir sinf uchun kuniga MAX dars soni (standart 6).
+   *  Bu "ko'p dars tuzilmasin, o'quvchi charchamasin" talabi uchun. */
+  const maxLessonsPerClassDay = opts.maxLessonsPerClassDay ?? 6
 
   const classById = new Map(classes.map((c) => [c.id, c]))
   const teacherById = new Map(teachers.map((t) => [t.id, t]))
@@ -188,6 +258,8 @@ function generateOnce(
   const classLessonDayCount = new Map<string, number>() // `${classId}:${day}:${lessonId}` -> hisob
   const teacherDayCount = new Map<string, number>() // `${teacherId}:${day}` -> hisob
   const teacherWeekCount = new Map<string, number>() // `${teacherId}` -> jami
+  /** Har sinf kuniga nechta dars tuzilganini hisobi (maxLessonsPerClassDay cheklovi uchun) */
+  const classDayLessonCount = new Map<string, number>() // `${classId}:${day}` -> hisob
 
   const canPlace = (s: Session, d: number, start: number): boolean => {
     if (start + s.length - 1 > maxP) return false
@@ -209,6 +281,13 @@ function generateOnce(
         const cnt = classLessonDayCount.get(`${cid}:${d}:${s.lessonId}`) ?? 0
         // Hozirgi sessiya length ta slot egallaydi — birinchi kelgan session uchun cnt=0 bo'ladi
         if (cnt + s.length > s.maxPerDay) return false
+      }
+    }
+    // 2a) Sinf kuniga maksimal dars (yangi — "6 soatdan ko'p dars tuzilmasin")
+    if (maxLessonsPerClassDay > 0) {
+      for (const cid of s.classIds) {
+        const dayLessons = classDayLessonCount.get(`${cid}:${d}`) ?? 0
+        if (dayLessons + s.length > maxLessonsPerClassDay) return false
       }
     }
     // 3) Har slot bo'yicha standart tekshiruvlar
@@ -265,6 +344,9 @@ function generateOnce(
       // Dars kuniga nechta — maxPerDay cheklovi uchun (length bilan hisob)
       const lk = `${cid}:${pl.day}:${pl.session.lessonId}`
       classLessonDayCount.set(lk, (classLessonDayCount.get(lk) ?? 0) + delta * pl.session.length)
+      // Sinf kunlik umumiy dars hisobi (maxLessonsPerClassDay uchun)
+      const dk = `${cid}:${pl.day}`
+      classDayLessonCount.set(dk, (classDayLessonCount.get(dk) ?? 0) + delta * pl.session.length)
     }
     for (const tid of pl.session.teacherIds) {
       // O'qituvchi kunlik hisobi (sig'im uchun)

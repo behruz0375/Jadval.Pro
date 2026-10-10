@@ -142,6 +142,15 @@
     font-feature-settings: 'ss01', 'cv01', 'cv11';
     letter-spacing: -0.006em;
     overflow: hidden;
+    /* Mobil touch scroll uchun */
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Scrollable konteynerlarda silliq touch scroll */
+  .overflow-y-auto,
+  .overflow-auto {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
   /* Sarlavhalar — Sora display shrifti (JadvalPro Design System) */
   h1,

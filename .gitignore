@@ -34,3 +34,13 @@ Thumbs.db
 /target
 /src-tauri/target
 /gen/schemas
+
+# Python backend
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.db
+backend/*.db-journal
+backend/*.db-wal
+backend/*.db-shm
+backend/.env

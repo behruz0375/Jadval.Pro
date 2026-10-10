@@ -262,13 +262,20 @@ export async function exportDataPdf(project: Project) {
   const sections: { title: string; head: string[]; body: (string | number)[][] }[] = [
     {
       title: 'Sinflar',
-      head: ['#', 'Sinf nomi', 'Qisqa', "O'quvchi", 'Navbat', 'Bino'],
-      body: classes.map((c, i) => [i + 1, c.name, c.short, c.studentCount, c.shiftIndex, c.building]),
+      head: ['#', 'Sinf nomi', 'Qisqa', 'Navbat', 'Sinf rahbari', 'Bino'],
+      body: classes.map((c, i) => [
+        i + 1,
+        c.name,
+        c.short,
+        c.shiftIndex,
+        teacherName(c.classTeacherId),
+        c.building,
+      ]),
     },
     {
       title: 'Fanlar',
-      head: ['#', 'Fan nomi', 'Qisqa', "Og'irlik"],
-      body: subjects.map((s, i) => [i + 1, s.name, s.short, s.weight]),
+      head: ['#', 'Fan nomi', 'Qisqa'],
+      body: subjects.map((s, i) => [i + 1, s.name, s.short]),
     },
     {
       title: 'Xonalar',
@@ -277,8 +284,8 @@ export async function exportDataPdf(project: Project) {
     },
     {
       title: "O'qituvchilar",
-      head: ['#', 'F.I.Sh.', 'Telefon', 'Kunlik', 'Haftalik'],
-      body: teachers.map((t, i) => [i + 1, t.fullName, t.phone, t.dailyCapacity, t.weeklyMax]),
+      head: ['#', 'F.I.Sh.', 'Kunlik', 'Haftalik'],
+      body: teachers.map((t, i) => [i + 1, t.fullName, t.dailyCapacity, t.weeklyMax]),
     },
     {
       title: 'Darslar',
