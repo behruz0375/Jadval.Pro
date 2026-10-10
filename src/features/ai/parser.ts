@@ -144,6 +144,26 @@ function mPowerful(t: string): ParseResult | null {
 }
 
 function mSchedule(t: string): ParseResult | null {
+  // Yangi: jadvalni tushuntirish / diagnostika / tekshirish
+  if (/\b(tekshir|validate|проверь|check)\b.*\b(loyiha|проект|project|tayyor|готов|ready)\b/.test(t)
+    || /\b(tayyormi|готово\s+ли|is\s+ready)\b/.test(t)) {
+    return { type: 'tool', call: { name: 'validate_project', args: {} } }
+  }
+  if (/\b(tushunt|объясни|explain)\b.*\b(jadval|расписа|schedule|timetable)\b/.test(t)
+    || /\b(jadval|расписа|schedule)\b.*\b(tushunt|объясни|explain|haqida|status|holat)\b/.test(t)
+    || /\b(jadval\s+qanday|jadval\s+necha|как\s+расписа)\b/.test(t)) {
+    return { type: 'tool', call: { name: 'explain_timetable', args: {} } }
+  }
+  if (/\b(nega|почему|why)\b.*\b(joylash|разместил|placed|qolib|остал|unplaced)\b/.test(t)
+    || /\b(unplaced|joylashma|не\s+разместил)\b/.test(t)
+    || /\b(dars.*qolib|qolib.*dars|оставшиеся.*урок)\b/.test(t)) {
+    return { type: 'tool', call: { name: 'diagnose_unplaced', args: {} } }
+  }
+  if (/\b(maslahat|совет|hint|suggest|tavsiya)\b/.test(t)
+    || /\b(qanday\s+tuzat|как\s+испр|how\s+to\s+fix)\b/.test(t)
+    || /\b(muammo|problem|issue)\b.*\b(tuzat|исправ|fix)\b/.test(t)) {
+    return { type: 'tool', call: { name: 'suggest_fix', args: {} } }
+  }
   if (/\b(yaxshila|yaxshilash|optimize|optimis|улучш)\b/.test(t)) return { type: 'tool', call: { name: 'improve_timetable', args: {} } }
   if (/\b(jadval\s+tuz|jadvalni\s+tuz|avtomatik\s+tuz|составь\s+расписа|создай\s+расписа|сгенерир|generate|build\s+schedule)\b/.test(t)
     || /\b(tuz|составь|generate)\b.*\b(jadval|расписа|schedule|timetable)\b/.test(t)) {

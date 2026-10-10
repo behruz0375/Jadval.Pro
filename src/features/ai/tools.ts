@@ -825,6 +825,128 @@ export const TOOLS: ToolDef[] = [
       return { ok: true, message: `✓ Ochildi: ${panel}` }
     },
   },
+  // ============ JADVAL TAHLILI (yangi, 2026-10-10) ============
+  {
+    name: 'validate_project',
+    description: "Loyihani jadval tuzishga tayyormi deb tekshiradi: o'qituvchi yuklamasi, sinf sig'imi, metodik kun, umumiy balans. Jadval tuzmasdan oldin ishlatish uchun.",
+    params: [],
+    run: async (_a, ctx) => {
+      const { validateProject } = await import('@/engine/validate')
+      const p = ctx.getProject()
+      const r = validateProject(p)
+      if (r.ok) return { ok: true, message: '✓ Loyiha tayyor. Hech qanday muammo yo‘q — jadval muvaffaqiyatli tuziladi.' }
+      const lines: string[] = [r.summary, '']
+      const errors = r.issues.filter((i) => i.severity === 'error')
+      const warnings = r.issues.filter((i) => i.severity === 'warning')
+      if (errors.length) {
+        lines.push('❌ XATOLAR:')
+        errors.slice(0, 8).forEach((i) => {
+          lines.push(`• ${i.message}${i.hint ? ` → ${i.hint}` : ''}`)
+        })
+        if (errors.length > 8) lines.push(`  ... va yana ${errors.length - 8} ta`)
+      }
+      if (warnings.length) {
+        lines.push('', '⚠ Ogohlantirishlar:')
+        warnings.slice(0, 5).forEach((i) => {
+          lines.push(`• ${i.message}${i.hint ? ` → ${i.hint}` : ''}`)
+        })
+      }
+      return { ok: !r.willFail, message: lines.join('\n') }
+    },
+  },
+  {
+    name: 'explain_timetable',
+    description: 'Joriy jadval statistikasini tushuntiradi: nechta dars joylashgan, konfliktlar, bo‘shliqlar, qaysi o‘qituvchi qancha soat ishlaydi.',
+    params: [],
+    run: (_a, ctx) => {
+      const p = ctx.getProject()
+      const working = p.timetables.find((t) => t.name === 'Ishchi jadval') ?? p.timetables[p.timetables.length - 1]
+      if (!working || working.entries.length === 0) {
+        return { ok: false, message: 'Hali jadval tuzilmagan. "Jadval tuz" buyrug‘ini ishlating yoki Taqsimot → Avtomatik tugmasini bosing.' }
+      }
+      const st = working.stats
+      const totalLessons = p.lessons.reduce((a, l) => a + l.hoursPerWeek * Math.max(1, l.classIds.length), 0)
+      const placedPct = Math.round((st.placed / Math.max(1, totalLessons)) * 100)
+      const lines = [
+        `📅 Joriy jadval: "${working.name}"`,
+        '',
+        `• Joylashtirilgan: ${st.placed} / ${totalLessons} (${placedPct}%)`,
+        `• Qolgan: ${st.unplaced || 0}`,
+        `• Qattiq konfliktlar: ${st.hardViolations || 0}`,
+        `• O'qituvchi oynalari (bo'shliqlar): ${st.teacherGaps || 0}`,
+        `• Yumshoq jarima: ${st.softPenalty || 0}`,
+      ]
+      if (st.unplaced > 0) {
+        lines.push('', '⚠ Darslar qolgan — "diagnose_unplaced" buyrug‘ini ishlating sabablarini bilish uchun.')
+      } else {
+        lines.push('', '✓ Barcha darslar joylashtirilgan!')
+      }
+      return { ok: true, message: lines.join('\n') }
+    },
+  },
+  {
+    name: 'diagnose_unplaced',
+    description: 'Joylashmagan darslar sababini tushuntiradi: qaysi o‘qituvchi yetishmayapti, qaysi sinf sig‘maydi, qanday cheklov halaqit beradi.',
+    params: [],
+    run: async (_a, ctx) => {
+      const { validateProject } = await import('@/engine/validate')
+      const p = ctx.getProject()
+      const v = validateProject(p)
+      if (v.willFail) {
+        return {
+          ok: false,
+          message: 'Loyihada xato bor:\n' + v.issues
+            .filter((i) => i.severity === 'error')
+            .slice(0, 5)
+            .map((i) => `• ${i.message}${i.hint ? ` → ${i.hint}` : ''}`)
+            .join('\n'),
+        }
+      }
+      // Loyiha xatosi yo'q, lekin unplaced qolgan bo'lsa — joylashtirish qiyinligi
+      const working = p.timetables.find((t) => t.name === 'Ishchi jadval') ?? p.timetables[p.timetables.length - 1]
+      if (!working || working.stats.unplaced === 0) {
+        return { ok: true, message: 'Hamma darslar joylashgan — hech qanday muammo yo‘q.' }
+      }
+      // Taxminiy sabablar
+      const reasons: string[] = []
+      const totalLesson = p.lessons.reduce((a, l) => a + l.hoursPerWeek * Math.max(1, l.classIds.length), 0)
+      const totalCap = p.teachers.reduce((a, t) => a + (t.weeklyMax > 0 ? t.weeklyMax : 24), 0)
+      if (totalLesson > totalCap) {
+        reasons.push(`O'qituvchi haftalik maksimumlari jami ${totalCap} soat, lekin ${totalLesson} soat kerak. Yangi o'qituvchi qo'shing.`)
+      }
+      for (const t of p.teachers) {
+        const assigned = p.lessons
+          .filter((l) => l.teacher1Id === t.id || l.teacher2Id === t.id)
+          .reduce((a, l) => a + l.hoursPerWeek, 0)
+        if (t.weeklyMax > 0 && assigned > t.weeklyMax) {
+          reasons.push(`${t.fullName}: ${assigned} soat tayinlangan, ${t.weeklyMax} soat ruxsat → cheklov sabab bir qism tushib qoladi`)
+        }
+      }
+      if (reasons.length === 0) {
+        reasons.push("Dars joylashishi uchun yetarli slot bor, lekin cheklovlar (metodik kun, availability grid, consecutive) bir-biri bilan konflikt bo'ldi. 'Yaxshilash' tugmasi yoki ko'proq urinish bilan qayta tuzing.")
+      }
+      return {
+        ok: true,
+        message:
+          `${working.stats.unplaced} ta dars joylashmay qoldi. Sabablari:\n` +
+          reasons.map((r) => '• ' + r).join('\n'),
+      }
+    },
+  },
+  {
+    name: 'suggest_fix',
+    description: 'Loyihadagi muammolarni avtomatik tuzatish uchun qanday qadam qilish kerakligini maslahat beradi.',
+    params: [],
+    run: async (_a, ctx) => {
+      const { validateProject } = await import('@/engine/validate')
+      const r = validateProject(ctx.getProject())
+      const hints = r.issues.filter((i) => i.hint).map((i) => `• ${i.hint}`)
+      if (hints.length === 0) {
+        return { ok: true, message: '✓ Loyihada hech qanday muammo yo‘q — birorta maslahat ham yo‘q.' }
+      }
+      return { ok: true, message: 'Maslahatlar:\n' + hints.slice(0, 10).join('\n') }
+    },
+  },
 ]
 
 /** Nom bo'yicha tool topish */

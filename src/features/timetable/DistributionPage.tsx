@@ -12,6 +12,7 @@ import type { TimetableVersion, TimetableEntry } from '@/types'
 import { cx, uid } from '@/utils'
 import { generateDirect } from '@/features/cloud/api'
 import { countHardViolations, timetableGaps } from '@/features/_shared/compute'
+import { validateProject } from '@/engine/validate'
 
 export function DistributionPage() {
   const project = useProject((s) => s.project)
@@ -33,6 +34,26 @@ export function DistributionPage() {
 
   const generate = () => {
     if (lessons.length === 0) return toast.error('Avval darslarni kiriting')
+    // Pre-flight: loyihani tekshiramiz
+    const check = validateProject(project)
+    if (check.willFail) {
+      const errorMessages = check.issues
+        .filter((i) => i.severity === 'error')
+        .map((i) => '• ' + i.message)
+        .join('\n')
+      const first = check.issues.find((i) => i.severity === 'error')
+      toast.error(
+        `Jadval tuzib bo'lmaydi — ${check.issues.filter((i) => i.severity === 'error').length} ta xato topildi:\n${errorMessages.slice(0, 400)}${first?.hint ? '\n\nMaslahat: ' + first.hint : ''}`,
+      )
+      return
+    }
+    if (check.issues.length > 0) {
+      // Ogohlantirishlar bor — toast'da ko'rsatamiz, lekin oldinga davom ettiramiz
+      const warningCount = check.issues.filter((i) => i.severity === 'warning').length
+      if (warningCount > 0) {
+        toast.info(`${warningCount} ta ogohlantirish — jadval tuziladi, lekin diqqat qiling`)
+      }
+    }
     setOptsOpen(true)
   }
 

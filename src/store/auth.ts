@@ -158,6 +158,10 @@ interface AuthState {
     plan?: string
     key?: string
   }) => void
+  /** Admin shu qurilmada direktor hisobini SOZLAYDI (yoki qayta yozadi) —
+   *  shu bilan admin o'z qurilmasida ham testlab ko'ra oladi (chiqib → Zavuch login).
+   *  Haqiqiy mijoz boshqa qurilmada login+parolni Zavuch panelida ro'yxatdan o'tishi kerak. */
+  provisionDirectorHere: (login: string, password: string) => Promise<string | null>
   /** Mavjud mijoz yozuvini yangilash (shu jumladan admin bergan login/parol) */
   updateCustomer: (id: string, patch: Partial<SchoolRecord>) => void
   setSchoolBlocked: (id: string, blocked: boolean) => void
@@ -609,6 +613,24 @@ export const useAuth = create<AuthState>()(
       },
       updateCustomer: (id, patch) =>
         set((s) => ({ schools: s.schools.map((x) => (x.licenseId === id ? { ...x, ...patch } : x)) })),
+
+      /** Admin qurilmasida direktor hisobini sozlash/qayta yozish.
+       *  OwnerPanel'dan chaqiriladi: admin yangi mijoz qo'shsa yoki tahrirlasa —
+       *  shu login/parol bilan DARHOL Zavuch rejimida kirib testlab ko'rishi mumkin. */
+      provisionDirectorHere: async (login, password) => {
+        if (!login.trim()) return 'Login kiriting'
+        if (password.length < 4) return "Parol kamida 4 belgi bo'lsin"
+        const cred = await makeCred(login, password)
+        const rec: StaffCred = {
+          ...cred,
+          machineSeal: get().machineCode,
+          active: true,
+          createdAt: new Date().toISOString(),
+        }
+        set((s) => ({ staff: { ...s.staff, director: rec } }))
+        get().logAudit('customer:provision-director', login)
+        return null
+      },
       setOwnerContact: (patch) => set((s) => ({ ownerContact: { ...s.ownerContact, ...patch } })),
 
       logAudit: (action, detail) =>

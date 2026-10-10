@@ -24,6 +24,10 @@ import { useAIChat, type Msg } from './chatStore'
 
 
 const SAMPLES_UZ = [
+  "Loyihani tekshirib ko'r — jadval tuzila oladimi?",
+  "Jadvalni tushuntirib ber",
+  "Nega darslar joylashmay qoldi?",
+  "Qanday tuzatish kerak?",
   "Yangi o'qituvchi: Ali Valiyev",
   "1-dan 4-gacha A va B sinflar yarat",
   "Jadval tuz",

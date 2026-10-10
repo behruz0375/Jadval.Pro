@@ -30,6 +30,7 @@ import { ProBadge } from '@/features/pro/ProBadge'
 export function OwnerPanel() {
   const schools = useAuth((s) => s.schools)
   const addCustomer = useAuth((s) => s.addCustomer)
+  const provisionDirectorHere = useAuth((s) => s.provisionDirectorHere)
   const updateCustomer = useAuth((s) => s.updateCustomer)
   const setSchoolBlocked = useAuth((s) => s.setSchoolBlocked)
   const removeSchool = useAuth((s) => s.removeSchool)
@@ -61,10 +62,11 @@ export function OwnerPanel() {
     setPassword(out)
   }
 
-  const save = () => {
+  const save = async () => {
     if (!schoolName.trim()) return toast.error('Maktab nomini kiriting')
     if (!login.trim()) return toast.error('Login kiriting')
     if (!password.trim()) return toast.error('Parolni kiriting')
+    if (password.length < 4) return toast.error("Parol kamida 4 belgi bo'lsin")
     // Pro tanlangan va kalit yo'q bo'lsa — avto-generatsiya
     const key = plan === 'Pro' ? (proKey.trim() || generateProKey()) : ''
     if (editId) {
@@ -73,6 +75,12 @@ export function OwnerPanel() {
     } else {
       addCustomer({ schoolName, director, phone, login, password, notes, plan, key })
       toast.success(plan === 'Pro' ? `Yangi Pro mijoz saqlandi. Kalit: ${key}` : 'Yangi mijoz saqlandi')
+    }
+    // MUHIM: shu qurilmada direktor hisobini ham sozlab beramiz —
+    // admin chiqib → Zavuch bo'lib kirib testlab ko'ra oladi
+    const err = await provisionDirectorHere(login, password)
+    if (err) {
+      toast.error('Direktor hisobini sozlashda xato: ' + err)
     }
     reset()
     setOpen(false)
@@ -321,6 +329,24 @@ export function OwnerPanel() {
                     <Send size={13} /> Yuborish
                   </button>
                   <button
+                    onClick={async () => {
+                      if (!s.login || !s.password) {
+                        toast.error('Login/parol topilmadi')
+                        return
+                      }
+                      const err = await provisionDirectorHere(s.login, s.password)
+                      if (err) {
+                        toast.error(err)
+                        return
+                      }
+                      toast.success('Zavuch hisobi shu qurilmada sozlandi — endi "Chiqish" bosib shu login/parol bilan Zavuch sifatida kirishingiz mumkin')
+                    }}
+                    className="btn btn-outline hover-lift h-8 px-2 text-xs"
+                    title="Shu login/parol bilan Zavuch panelida testlab ko'rish uchun direktor hisobini shu qurilmada sozlash"
+                  >
+                    <UserCog size={13} />
+                  </button>
+                  <button
                     onClick={() => openForEdit(s.licenseId)}
                     className="btn btn-outline hover-lift h-8 px-2 text-xs"
                     title="Tahrirlash"
@@ -416,6 +442,10 @@ export function OwnerPanel() {
         <p className="mt-3 rounded-lg bg-accent/5 px-3 py-2 text-xs text-muted">
           💡 Siz kiritgan login va parolni mijozga Telegramda yuboring. Mijoz dasturni ochib,
           «Zavuch — Kirish» → «Birinchi kirish» oynasida shu login va parolni kiritadi.
+        </p>
+        <p className="mt-2 rounded-lg bg-ok/5 px-3 py-2 text-xs text-ok">
+          ✓ <b>Shu qurilmada ham</b>: saqlagandan so'ng «Chiqish» bosib Zavuch sifatida kirsangiz —
+          aynan shu login/parol ishlaydi. Direktor hisobi avtomatik sozlanadi.
         </p>
       </Modal>
 
