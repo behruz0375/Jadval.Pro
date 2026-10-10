@@ -95,19 +95,22 @@ export function generateTimetable(
   let best: TimetableVersion | null = null
 
   /** Project'ni cheklovlar bo'yicha yumshatib qaytaradi.
-   *  level 1: teacher daily/weekly +2 / +4, lesson maxPerDay +1
-   *  level 2: + methodik kunni olib tashlash (vaqtincha)
-   *  level 3: + daily/weekly cheklov butunlay o'chiriladi (oxirgi chora)
-   *  level 4+: + har qanday availability'ni yoqish (eng extreme — faqat shift grid qoladi) */
+   *  **weeklyMax hech qachon buzilmaydi** — o'qituvchi faqat o'ziga belgilangan
+   *  haftalik soatcha dars berishi mumkin (shartnoma/tarif asosida).
+   *
+   *  level 1: dailyCapacity +2, lesson maxPerDay +1 (kunlik yuk biroz oshadi)
+   *  level 2: + methodik kunni vaqtincha olib tashlash
+   *  level 3: + dailyCapacity cheksiz (lekin weeklyMax saqlanadi)
+   *  level 4+: + har qanday availability'ni yoqish (eng extreme — weeklyMax hali ham saqlanadi) */
   const relaxProject = (p: Project, level: number): Project => {
     if (level <= 0) return p
     return {
       ...p,
       teachers: p.teachers.map((t) => ({
         ...t,
-        // level 3 dan boshlab cheksiz (0 = cheksiz)
+        // level 3 dan boshlab kunlik cheksiz. Haftalik — HECH QACHON yumshamaydi.
         dailyCapacity: level >= 3 ? 0 : t.dailyCapacity + 2 * level,
-        weeklyMax: level >= 3 ? 0 : t.weeklyMax + 4 * level,
+        weeklyMax: t.weeklyMax, // QAT'IY — o'qituvchi tarifiga mos
         methodicalDay: level >= 2 ? -1 : t.methodicalDay,
         // level 4: barcha slot'lar ochiq
         availability: level >= 4

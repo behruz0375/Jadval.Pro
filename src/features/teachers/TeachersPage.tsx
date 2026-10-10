@@ -75,7 +75,37 @@ export function TeachersPage() {
     },
     { key: 'short', header: 'Qisqacha', render: (r) => r.short },
     { key: 'subj', header: 'Fanlari', render: (r) => <span className="text-muted">{subjName(r.subjectIds) || '—'}</span> },
-    { key: 'load', header: 'Yuklama', align: 'center', render: (r) => teacherLoad(r.id, lessons) },
+    {
+      key: 'load',
+      header: 'Yuklama',
+      align: 'center',
+      render: (r) => {
+        const load = teacherLoad(r.id, lessons)
+        const max = r.weeklyMax
+        const over = max > 0 && load > max
+        const nearLimit = max > 0 && load > max * 0.9 && !over
+        return (
+          <span
+            className={cx(
+              'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-semibold tabular-nums',
+              over
+                ? 'bg-danger/15 text-danger'
+                : nearLimit
+                  ? 'bg-warn/15 text-warn'
+                  : '',
+            )}
+            title={
+              over
+                ? `OSHIB KETGAN: ${load} soat belgilangan, lekin ruxsat etilgan haftalik — ${max} soat`
+                : `${load} / ${max} soat`
+            }
+          >
+            {load}
+            {max > 0 && <span className="text-[10px] opacity-70">/{max}</span>}
+          </span>
+        )
+      },
+    },
     { key: 'md', header: 'Metodik kun', align: 'center', render: (r) => (r.methodicalDay >= 0 ? DAYS_UZ[r.methodicalDay] : '—') },
     { key: 'cap', header: 'Kunlik sig\'im', align: 'center', render: (r) => r.dailyCapacity },
     { key: 'gap', header: 'Darcha', align: 'center', render: (r) => (r.minimizeGaps ? <span className="chip text-ok">kam</span> : '—') },

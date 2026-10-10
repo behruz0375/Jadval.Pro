@@ -220,9 +220,9 @@ def generate_timetable(
                 day_cnt = state.teacher_day_count.get((sess.teacher_id, day), 0)
                 if dcap > 0 and day_cnt + sess.length > dcap:
                     continue
-                # teacher weekly max (relax darajasida yumshatiladi)
-                base_wmax = int(teacher.get("weeklyMax") or teacher.get("weekly_max") or 24) if teacher else 24
-                wmax = 999 if relax_level >= 3 else base_wmax + relax_week
+                # teacher weekly max — QAT'IY, hech qanday relax'da buzilmaydi
+                # (o'qituvchining shartnoma/tarif soati)
+                wmax = int(teacher.get("weeklyMax") or teacher.get("weekly_max") or 24) if teacher else 24
                 wcnt = state.teacher_week_count.get(sess.teacher_id, 0)
                 if wmax > 0 and wcnt + sess.length > wmax:
                     continue

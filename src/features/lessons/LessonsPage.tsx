@@ -103,6 +103,22 @@ export function LessonsPage() {
     if (!d.subjectId) return setError('Fan tanlang')
     if (d.classIds.length === 0) return setError('Kamida bitta sinf tanlang')
     if (!d.teacher1Id) return setError("1-o'qituvchini tanlang")
+    // O'qituvchining weeklyMax dan oshib ketish tekshiruvi
+    for (const tid of [d.teacher1Id, d.teacher2Id].filter(Boolean) as string[]) {
+      const tch = teachers.find((t) => t.id === tid)
+      if (!tch || tch.weeklyMax <= 0) continue
+      // Shu o'qituvchining boshqa darslaridagi jami yuklama (joriy tahrirlangan darsni chiqarib)
+      const otherLoad = lessons
+        .filter((l) => l.id !== d.id && (l.teacher1Id === tid || l.teacher2Id === tid))
+        .reduce((a, l) => a + l.hoursPerWeek, 0)
+      const newTotal = otherLoad + d.hoursPerWeek
+      if (newTotal > tch.weeklyMax) {
+        return setError(
+          `${tch.fullName}ga haftasiga ${tch.weeklyMax} soat ruxsat etilgan. ` +
+          `Bu dars qo'shilsa — jami ${newTotal} soat bo'ladi (${newTotal - tch.weeklyMax} soat ortiqcha).`,
+        )
+      }
+    }
     if (editing.isNew) {
       addLesson(d)
       setSelectedId(d.id)
@@ -273,17 +289,37 @@ export function LessonsPage() {
             <Field label="1-o'qituvchi">
               <SelectField value={editing.draft.teacher1Id} onChange={(e) => setDraft({ teacher1Id: e.target.value })}>
                 <option value="">— tanlang —</option>
-                {teachers.map((t) => (
-                  <option key={t.id} value={t.id}>{t.fullName}</option>
-                ))}
+                {teachers.map((t) => {
+                  const other = lessons
+                    .filter((l) => l.id !== editing.draft.id && (l.teacher1Id === t.id || l.teacher2Id === t.id))
+                    .reduce((a, l) => a + l.hoursPerWeek, 0)
+                  const after = other + editing.draft.hoursPerWeek
+                  const over = t.weeklyMax > 0 && after > t.weeklyMax
+                  return (
+                    <option key={t.id} value={t.id}>
+                      {t.fullName} ({other}/{t.weeklyMax || '∞'})
+                      {over ? ' ⚠' : ''}
+                    </option>
+                  )
+                })}
               </SelectField>
             </Field>
             <Field label="2-o'qituvchi (ixtiyoriy)">
               <SelectField value={editing.draft.teacher2Id ?? ''} onChange={(e) => setDraft({ teacher2Id: e.target.value || undefined })}>
                 <option value="">— yo'q —</option>
-                {teachers.map((t) => (
-                  <option key={t.id} value={t.id}>{t.fullName}</option>
-                ))}
+                {teachers.map((t) => {
+                  const other = lessons
+                    .filter((l) => l.id !== editing.draft.id && (l.teacher1Id === t.id || l.teacher2Id === t.id))
+                    .reduce((a, l) => a + l.hoursPerWeek, 0)
+                  const after = other + editing.draft.hoursPerWeek
+                  const over = t.weeklyMax > 0 && after > t.weeklyMax
+                  return (
+                    <option key={t.id} value={t.id}>
+                      {t.fullName} ({other}/{t.weeklyMax || '∞'})
+                      {over ? ' ⚠' : ''}
+                    </option>
+                  )
+                })}
               </SelectField>
             </Field>
 
