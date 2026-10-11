@@ -14,13 +14,17 @@ import {
   Clock,
   Send,
   ShoppingBag,
+  BookOpenCheck,
 } from 'lucide-react'
 import { OwnerLoginModal } from '@/features/auth/AuthScreens'
+import { TutorialGuide } from '@/features/auth/TutorialGuide'
 import { BackgroundSlideshow } from '@/components/BackgroundSlideshow'
+import { LangSwitcher } from '@/components/LangSwitcher'
 import { useAuth } from '@/store/auth'
 import { useToast } from '@/store/toast'
 import { telegramUrl } from '@/utils'
 import { APP_VERSION } from '@/constants'
+import { useT } from '@/i18n'
 import type { LucideIcon } from 'lucide-react'
 
 const FEATURES: { icon: LucideIcon; title: string; text: string }[] = [
@@ -40,20 +44,22 @@ const STATS = [
 ]
 
 export function LandingPage({ onEnter }: { onEnter: () => void }) {
+  const t = useT()
   const [ownerOpen, setOwnerOpen] = useState(false)
+  const [tutorialOpen, setTutorialOpen] = useState(false)
   const ownerContact = useAuth((s) => s.ownerContact)
   const machineCode = useAuth((s) => s.machineCode)
   const toast = useToast()
 
   const buyProgram = async () => {
-    const msg = `Assalomu alaykum! JadvalPro dasturini sotib olmoqchiman.\nMaxsus kod: ${machineCode}`
+    const msg = `${t('Assalomu alaykum! JadvalPro dasturini sotib olmoqchiman.')}\n${t('Maxsus kod')}: ${machineCode}`
     try {
       await navigator.clipboard.writeText(msg)
-      toast.success('Xabar nusxalandi — Telegramga joylang')
+      toast.success(t('Xabar nusxalandi — Telegramga joylang'))
     } catch { /* ignore */ }
     const url = telegramUrl(ownerContact.telegram)
     if (!url) {
-      toast.error("Admin aloqa ma'lumoti kiritilmagan")
+      toast.error(t("Admin aloqa ma'lumoti kiritilmagan"))
       return
     }
     window.open(url, '_blank')
@@ -81,21 +87,22 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
             <span className="text-lg font-bold">JadvalPro <span className="text-muted">2026</span></span>
           </div>
           <div className="flex items-center gap-2">
+            <LangSwitcher />
             {ownerContact.telegram && (
               <button
                 onClick={buyProgram}
                 className="btn hover-lift bg-[#2AABEE] text-white hover:brightness-110"
-                title="Dasturni sotib olish — Telegramda admin bilan bog'lanish"
+                title={t("Dasturni sotib olish — Telegramda admin bilan bog'lanish")}
               >
-                <ShoppingBag size={15} /> <span className="hidden sm:inline">Sotib olish</span>
+                <ShoppingBag size={15} /> <span className="hidden sm:inline">{t('Sotib olish')}</span>
                 <Send size={14} />
               </button>
             )}
             <button onClick={() => setOwnerOpen(true)} className="btn btn-ghost hover-lift hidden sm:inline-flex">
-              <Crown size={16} /> Egasi kirishi
+              <Crown size={16} /> {t('Egasi kirishi')}
             </button>
             <button onClick={onEnter} className="btn btn-accent hover-lift shadow-soft">
-              Kirish <ArrowRight size={16} />
+              {t('Kirish')} <ArrowRight size={16} />
             </button>
           </div>
         </nav>
@@ -103,21 +110,26 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
         {/* Hero */}
         <header className="mx-auto max-w-4xl px-5 pb-10 pt-12 text-center sm:pt-20">
           <div className="anim-rise chip mx-auto mb-5 w-fit border border-border bg-surface/70 px-3 py-1 backdrop-blur" style={{ animationDelay: '0.05s' }}>
-            <Sparkles size={13} className="text-accent" /> Maktablar uchun aqlli jadval tuzuvchi
+            <Sparkles size={13} className="text-accent" /> {t('Maktablar uchun aqlli jadval tuzuvchi')}
           </div>
           <h1 className="anim-rise text-4xl font-black leading-tight sm:text-6xl" style={{ animationDelay: '0.12s' }}>
-            Dars jadvalini <span className="text-gradient">soniyalarda</span> tuzing
+            {t('Dars jadvalini')} <span className="text-gradient">{t('soniyalarda')}</span> {t('tuzing')}
           </h1>
           <p className="anim-rise mx-auto mt-5 max-w-2xl text-base text-muted sm:text-lg" style={{ animationDelay: '0.2s' }}>
-            JadvalPro — o'qituvchi, sinf va xonalar bo'yicha to'qnashuvsiz, SanPiN talablariga mos
-            jadvalni avtomatik tuzadi. Qo'lda kunlar ketadigan ishni bir necha daqiqaga qisqartiradi.
+            {t("JadvalPro — o'qituvchi, sinf va xonalar bo'yicha to'qnashuvsiz, SanPiN talablariga mos jadvalni avtomatik tuzadi. Qo'lda kunlar ketadigan ishni bir necha daqiqaga qisqartiradi.")}
           </p>
           <div className="anim-rise mt-8 flex flex-wrap items-center justify-center gap-3" style={{ animationDelay: '0.28s' }}>
             <button onClick={onEnter} className="btn btn-accent hover-lift animate-glow px-6 py-3 text-base shadow-panel">
-              Boshlash <ArrowRight size={18} />
+              {t('Boshlash')} <ArrowRight size={18} />
+            </button>
+            <button
+              onClick={() => setTutorialOpen(true)}
+              className="btn hover-lift border border-accent/30 bg-accent/10 px-6 py-3 text-base text-accent backdrop-blur hover:bg-accent/20"
+            >
+              <BookOpenCheck size={18} /> {t("Dasturni o'rganish")}
             </button>
             <a href="#features" className="btn btn-outline hover-lift px-6 py-3 text-base backdrop-blur">
-              Imkoniyatlar
+              {t('Imkoniyatlar')}
             </a>
           </div>
 
@@ -126,7 +138,7 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
             {STATS.map((s) => (
               <div key={s.label} className="card hover-lift bg-surface/70 p-4 backdrop-blur hover:shadow-panel">
                 <div className="text-2xl font-black text-accent">{s.value}</div>
-                <div className="mt-0.5 text-xs text-muted">{s.label}</div>
+                <div className="mt-0.5 text-xs text-muted">{t(s.label)}</div>
               </div>
             ))}
           </div>
@@ -136,7 +148,7 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
         <div className="mx-auto max-w-4xl px-5 pb-6">
           <div className="anim-rise card hover-lift overflow-hidden bg-surface/80 p-4 backdrop-blur hover:shadow-panel" style={{ animationDelay: '0.44s' }}>
             <div className="mb-3 flex items-center gap-2 text-sm text-muted">
-              <CalendarRange size={16} className="text-accent" /> Namuna jadval — 5-A sinf
+              <CalendarRange size={16} className="text-accent" /> {t('Namuna jadval — 5-A sinf')}
             </div>
             <MiniTimetable />
           </div>
@@ -144,9 +156,9 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
 
         {/* Features */}
         <section id="features" className="mx-auto max-w-6xl px-5 py-14">
-          <h2 className="text-center text-2xl font-bold sm:text-3xl">Nega aynan JadvalPro?</h2>
+          <h2 className="text-center text-2xl font-bold sm:text-3xl">{t('Nega aynan JadvalPro?')}</h2>
           <p className="mx-auto mt-2 max-w-xl text-center text-muted">
-            Zamonaviy, tez va xavfsiz — maktab ehtiyojlariga moslangan.
+            {t('Zamonaviy, tez va xavfsiz — maktab ehtiyojlariga moslangan.')}
           </p>
           <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f, i) => {
@@ -160,8 +172,8 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
                   <div className="grid h-12 w-12 place-items-center rounded-xl bg-accent/15 text-accent transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
                     <Icon size={24} />
                   </div>
-                  <h3 className="mt-4 text-lg font-semibold">{f.title}</h3>
-                  <p className="mt-1.5 text-sm text-muted">{f.text}</p>
+                  <h3 className="mt-4 text-lg font-semibold">{t(f.title)}</h3>
+                  <p className="mt-1.5 text-sm text-muted">{t(f.text)}</p>
                 </div>
               )
             })}
@@ -173,30 +185,35 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
           <div className="card relative overflow-hidden bg-gradient-to-br from-accent/15 to-surface p-8 text-center sm:p-12">
             <div className="blob animate-floatB h-48 w-48 bg-accent/30" style={{ top: '-2rem', right: '-2rem' }} />
             <div className="relative z-10">
-              <h2 className="text-2xl font-bold sm:text-3xl">Bugun jadvalingizni tuzing</h2>
+              <h2 className="text-2xl font-bold sm:text-3xl">{t('Bugun jadvalingizni tuzing')}</h2>
               <ul className="mx-auto mt-5 flex max-w-md flex-col gap-2 text-left text-sm">
-                {['Konfliktsiz avtomatik jadval', 'Qurilmaga bog\'langan xavfsiz litsenziya', 'Excel va PDF eksport', 'Internetsiz, tez va maxfiy'].map((t) => (
-                  <li key={t} className="flex items-center gap-2">
-                    <CheckCircle2 size={17} className="shrink-0 text-ok" /> {t}
+                {[
+                  'Konfliktsiz avtomatik jadval',
+                  "Qurilmaga bog'langan xavfsiz litsenziya",
+                  'Excel va PDF eksport',
+                  'Internetsiz, tez va maxfiy',
+                ].map((item) => (
+                  <li key={item} className="flex items-center gap-2">
+                    <CheckCircle2 size={17} className="shrink-0 text-ok" /> {t(item)}
                   </li>
                 ))}
               </ul>
               <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
                 <button onClick={onEnter} className="btn btn-accent hover-lift px-7 py-3 text-base shadow-panel">
-                  Dasturga kirish <ArrowRight size={18} />
+                  {t('Dasturga kirish')} <ArrowRight size={18} />
                 </button>
                 {ownerContact.telegram && (
                   <button
                     onClick={buyProgram}
                     className="btn hover-lift bg-[#2AABEE] px-7 py-3 text-base text-white shadow-panel hover:brightness-110"
                   >
-                    <ShoppingBag size={17} /> Sotib olish <Send size={16} />
+                    <ShoppingBag size={17} /> {t('Sotib olish')} <Send size={16} />
                   </button>
                 )}
               </div>
               {ownerContact.telegram && (
                 <p className="mt-3 text-xs text-muted">
-                  Narx va to'lov tartibini admin Telegramda yuboradi
+                  {t("Narx va to'lov tartibini admin Telegramda yuboradi")}
                 </p>
               )}
             </div>
@@ -207,23 +224,25 @@ export function LandingPage({ onEnter }: { onEnter: () => void }) {
         <footer className="border-t border-border/60 bg-surface/50 backdrop-blur">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-5 text-sm text-muted">
             <div className="flex items-center gap-2">
-              <Clock size={14} /> JadvalPro {APP_VERSION} — Dars jadvali tuzuvchi
+              <Clock size={14} /> JadvalPro {APP_VERSION} — {t('Dars jadvali tuzuvchi')}
             </div>
             <button onClick={() => setOwnerOpen(true)} className="flex items-center gap-1.5 hover:text-ink">
-              <Crown size={14} /> Egasi (dastur sotuvchisi) kirishi
+              <Crown size={14} /> {t('Egasi (dastur sotuvchisi) kirishi')}
             </button>
           </div>
         </footer>
       </div>
 
       <OwnerLoginModal open={ownerOpen} onClose={() => setOwnerOpen(false)} />
+      <TutorialGuide open={tutorialOpen} onClose={() => setTutorialOpen(false)} />
     </div>
   )
 }
 
 /** Dekorativ mini jadval */
 function MiniTimetable() {
-  const days = ['Du', 'Se', 'Ch', 'Pa', 'Ju']
+  const t = useT()
+  const days = [t('Du'), t('Se'), t('Ch'), t('Pa'), t('Ju')]
   const cells: { s: string; c: string }[][] = [
     [{ s: 'Mat', c: '#3b82f6' }, { s: 'Ona', c: '#f97316' }, { s: 'Mat', c: '#3b82f6' }, { s: 'Ing', c: '#22c55e' }, { s: 'Fiz', c: '#a855f7' }],
     [{ s: 'Ing', c: '#22c55e' }, { s: 'Mat', c: '#3b82f6' }, { s: 'Bio', c: '#14b8a6' }, { s: 'Ona', c: '#f97316' }, { s: 'Mat', c: '#3b82f6' }],

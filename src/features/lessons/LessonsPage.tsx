@@ -165,25 +165,25 @@ export function LessonsPage() {
   const totalHours = filtered.reduce((a, l) => a + l.hoursPerWeek, 0)
 
   return (
-    <div className="flex h-full flex-col gap-3 p-4">
+    <div className="flex h-full flex-col gap-2 p-2 sm:gap-3 sm:p-4">
       {/* Yuqori panel */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-2">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-accent/15 text-accent">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent/15 text-accent">
             <CalendarDays size={20} />
           </div>
           <h1 className="text-lg font-bold">Darslar</h1>
         </div>
 
         {/* Filtr: tur (Sinf/Fan/O'qituvchi) + qiymat */}
-        <div className="ml-2 flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1 sm:ml-2">
           <SelectField
             value={filterType}
             onChange={(e) => {
               setFilterType(e.target.value as 'class' | 'subject' | 'teacher')
               setFilterValue('ALL')
             }}
-            className="h-9 w-28"
+            className="h-9 w-24 sm:w-28"
             title="Filtr turi"
           >
             <option value="class">Sinf</option>
@@ -193,7 +193,7 @@ export function LessonsPage() {
           <button className="btn btn-ghost h-9 w-9 p-0" onClick={() => cycle(-1)} title="Oldingi">
             <ChevronLeft size={18} />
           </button>
-          <SelectField value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className="h-9 w-48">
+          <SelectField value={filterValue} onChange={(e) => setFilterValue(e.target.value)} className="h-9 w-32 sm:w-48">
             <option value="ALL">{allLabel}</option>
             {valueOptions.map((o) => (
               <option key={o.id} value={o.id}>
@@ -206,19 +206,32 @@ export function LessonsPage() {
           </button>
         </div>
 
-        <div className="relative">
+        <div className="relative w-full sm:w-auto">
           <Search size={16} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Qidirish..." className="input h-9 w-44 pl-8" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Qidirish..." className="input h-9 w-full pl-8 sm:w-44" />
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          <button onClick={() => setActivePanel('curriculum')} className="btn btn-outline h-9">
-            <Table2 size={16} /> O'quv reja
+        <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+          <button onClick={() => setActivePanel('curriculum')} className="btn btn-outline h-9 flex-1 sm:flex-initial">
+            <Table2 size={16} /> <span className="hidden sm:inline">O'quv reja</span><span className="sm:hidden">Reja</span>
           </button>
-          <button onClick={() => setActivePanel('tariff')} className="btn btn-outline h-9">
-            <Calculator size={16} /> Tarifikatsiya
+          <button onClick={() => setActivePanel('tariff')} className="btn btn-outline h-9 flex-1 sm:flex-initial">
+            <Calculator size={16} /> <span className="hidden sm:inline">Tarifikatsiya</span><span className="sm:hidden">Tarif</span>
           </button>
         </div>
+      </div>
+
+      {/* Amallar — mobilda yuqorida gorizontal, desktopda yon panel */}
+      <div className="flex flex-wrap gap-2 sm:hidden">
+        <button onClick={openNew} className="btn btn-accent h-9 flex-1">
+          <FilePlus2 size={16} /> Yaratish
+        </button>
+        <button onClick={() => selected && openEdit(selected)} disabled={!selected} className="btn btn-outline h-9 flex-1 disabled:opacity-40">
+          <Pencil size={16} /> Tahrirlash
+        </button>
+        <button onClick={() => selected && setConfirmDel(true)} disabled={!selected} className="btn btn-outline h-9 text-danger disabled:opacity-40">
+          <Trash2 size={16} />
+        </button>
       </div>
 
       {/* Jadval + amallar */}
@@ -233,7 +246,7 @@ export function LessonsPage() {
             onActivate={openEdit}
             empty={'Dars yo\'q. "Yaratish" tugmasini bosing.'}
             footer={
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-1">
                 <span>
                   Jami: <b className="text-ink">{filtered.length}</b> ta dars
                 </span>
@@ -245,7 +258,8 @@ export function LessonsPage() {
           />
         </div>
 
-        <div className="flex w-48 shrink-0 flex-col gap-2">
+        {/* Desktop yon panel — mobilda yashirin (yuqoridagi tugmalar ishlatiladi) */}
+        <div className="hidden w-48 shrink-0 flex-col gap-2 sm:flex">
           <button onClick={openNew} className="btn btn-accent justify-start">
             <FilePlus2 size={16} /> Yaratish
           </button>

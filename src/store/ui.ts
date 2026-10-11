@@ -8,6 +8,7 @@ interface UIState {
   history: string[]
   sidebarCollapsed: boolean
   searchOpen: boolean
+  mobileSidebarOpen: boolean
 
   // Pastki panel (status bar) sozlamalari
   theme: string
@@ -24,6 +25,7 @@ interface UIState {
   setActivePanel: (id: string) => void
   back: () => void
   toggleSidebar: () => void
+  setMobileSidebarOpen: (v: boolean) => void
   setTheme: (t: string) => void
   setZoom: (z: number) => void
   setSearchOpen: (v: boolean) => void
@@ -38,6 +40,7 @@ export const useUI = create<UIState>()(
       history: [],
       sidebarCollapsed: false,
       searchOpen: false,
+      mobileSidebarOpen: false,
 
       theme: 'softgray',
       zoom: 100,
@@ -60,6 +63,7 @@ export const useUI = create<UIState>()(
           return { activePanel: prev, history }
         }),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      setMobileSidebarOpen: (v) => set({ mobileSidebarOpen: v }),
       setTheme: (theme) => set({ theme }),
       setZoom: (zoom) => set({ zoom }),
       setSearchOpen: (searchOpen) => set({ searchOpen }),

@@ -4,6 +4,7 @@ import { Table, type Column } from '@/components/Table'
 import { Modal } from '@/components/Modal'
 import { cx } from '@/utils'
 import { useT } from '@/i18n'
+import { useExpiry } from '@/features/pro/useExpiry'
 
 export interface CrudModuleProps<T extends { id: string }> {
   title: string
@@ -28,6 +29,7 @@ export interface CrudModuleProps<T extends { id: string }> {
 export function CrudModule<T extends { id: string }>(props: CrudModuleProps<T>) {
   const { title, icon: Icon, columns, rows, create, add, update, remove } = props
   const t = useT()
+  const { isReadOnly } = useExpiry()
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editing, setEditing] = useState<{ draft: T; isNew: boolean } | null>(null)
@@ -101,35 +103,35 @@ export function CrudModule<T extends { id: string }>(props: CrudModuleProps<T>) 
   const getId = (r: T) => r.id
 
   return (
-    <div className="flex h-full flex-col gap-3 p-4">
+    <div className="flex h-full flex-col gap-2 p-2 sm:gap-3 sm:p-4">
       {/* Sarlavha + qidiruv */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <div className="flex items-center gap-2">
           {Icon && (
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-accent/15 text-accent">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent/15 text-accent">
               <Icon size={20} />
             </div>
           )}
           <h1 className="text-lg font-bold">{title}</h1>
         </div>
-        <div className="relative ml-auto">
+        <div className="relative ml-auto w-full sm:w-auto">
           <Search size={16} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('Qidirish...')}
-            className="input h-9 w-40 pl-8 sm:w-56"
+            className="input h-9 w-full pl-8 sm:w-56"
           />
         </div>
         {props.onExport && (
           <button onClick={props.onExport} className="btn btn-outline h-9">
-            <Download size={16} /> {t('Eksport')}
+            <Download size={16} /> <span className="hidden sm:inline">{t('Eksport')}</span>
           </button>
         )}
       </div>
 
       {/* Jadval + amallar */}
-      <div className="flex min-h-0 flex-1 flex-col-reverse gap-3 sm:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col-reverse gap-2 sm:flex-row sm:gap-3">
         <div className="min-h-0 min-w-0 flex-1">
           <Table
             columns={columns}
@@ -143,7 +145,7 @@ export function CrudModule<T extends { id: string }>(props: CrudModuleProps<T>) 
             onToggleAll={toggleAll}
             empty={t("Hozircha yozuv yo'q. «Yangi» tugmasini bosing.")}
             footer={
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-1">
                 <span>
                   {t('Jami')}: <b className="text-ink">{filtered.length}</b> {t('ta')}
                   {query && ` (${rows.length} ${t('dan')})`}
@@ -154,37 +156,39 @@ export function CrudModule<T extends { id: string }>(props: CrudModuleProps<T>) 
           />
         </div>
 
-        <div className="flex shrink-0 flex-row flex-wrap gap-2 sm:w-44 sm:flex-col">
-          <button onClick={openNew} className="btn btn-accent justify-start">
+        <div className="flex shrink-0 flex-row flex-wrap gap-1.5 sm:w-44 sm:flex-col sm:gap-2">
+          <button onClick={openNew} disabled={isReadOnly} className="btn btn-accent flex-1 justify-center disabled:opacity-40 sm:flex-initial sm:justify-start" title={isReadOnly ? t("Muddat tugagan — faqat ko'rish rejimi") : undefined}>
             <FilePlus2 size={16} /> {t('Yangi')}
           </button>
           <button
             onClick={() => selected && openEdit(selected)}
-            disabled={!selected}
-            className="btn btn-outline justify-start disabled:opacity-40"
+            disabled={!selected || isReadOnly}
+            className="btn btn-outline flex-1 justify-center disabled:opacity-40 sm:flex-initial sm:justify-start"
+            title={isReadOnly ? t("Muddat tugagan — faqat ko'rish rejimi") : t('Tahrirlash')}
           >
-            <Pencil size={16} /> {t('Tahrirlash')}
+            <Pencil size={16} /> <span className="hidden sm:inline">{t('Tahrirlash')}</span>
           </button>
           <button
             onClick={doClone}
-            disabled={!selected}
-            className="btn btn-outline justify-start disabled:opacity-40"
-            title={t('Nusxa')}
+            disabled={!selected || isReadOnly}
+            className="btn btn-outline justify-center disabled:opacity-40 sm:justify-start"
+            title={isReadOnly ? t("Muddat tugagan — faqat ko'rish rejimi") : t('Nusxa')}
           >
-            <Copy size={16} /> {t('Nusxa')}
+            <Copy size={16} /> <span className="hidden sm:inline">{t('Nusxa')}</span>
           </button>
           <button
             onClick={() => selected && setConfirmDel(true)}
-            disabled={!selected}
-            className="btn btn-outline justify-start text-danger disabled:opacity-40"
+            disabled={!selected || isReadOnly}
+            className="btn btn-outline justify-center text-danger disabled:opacity-40 sm:justify-start"
+            title={isReadOnly ? t("Muddat tugagan — faqat ko'rish rejimi") : t("O'chirish")}
           >
-            <Trash2 size={16} /> {t("O'chirish")}
+            <Trash2 size={16} /> <span className="hidden sm:inline">{t("O'chirish")}</span>
           </button>
           {props.onReorder && (
-            <div className="flex gap-2">
+            <div className="flex gap-1.5 sm:gap-2">
               <button
                 onClick={() => selected && !query && props.onReorder!(selected.id, -1)}
-                disabled={!selected || !!query}
+                disabled={!selected || !!query || isReadOnly}
                 className="btn btn-outline flex-1 justify-center disabled:opacity-40"
                 title={t('Yuqoriga')}
               >
@@ -192,7 +196,7 @@ export function CrudModule<T extends { id: string }>(props: CrudModuleProps<T>) 
               </button>
               <button
                 onClick={() => selected && !query && props.onReorder!(selected.id, 1)}
-                disabled={!selected || !!query}
+                disabled={!selected || !!query || isReadOnly}
                 className="btn btn-outline flex-1 justify-center disabled:opacity-40"
                 title={t('Pastga')}
               >
@@ -201,11 +205,11 @@ export function CrudModule<T extends { id: string }>(props: CrudModuleProps<T>) 
             </div>
           )}
           {checked.size > 0 && (
-            <button onClick={() => setConfirmBulk(true)} className="btn btn-danger justify-start">
+            <button onClick={() => setConfirmBulk(true)} disabled={isReadOnly} className="btn btn-danger justify-start disabled:opacity-40">
               <Trash2 size={16} /> {t('Belgilangan')} ({checked.size})
             </button>
           )}
-          {props.extraActions && <div className="flex flex-row flex-wrap gap-2 sm:mt-2 sm:flex-col">{props.extraActions}</div>}
+          {props.extraActions && <div className="flex flex-row flex-wrap gap-1.5 sm:mt-2 sm:flex-col sm:gap-2">{props.extraActions}</div>}
         </div>
       </div>
 

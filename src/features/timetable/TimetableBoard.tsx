@@ -18,6 +18,7 @@ import {
 import { useProject } from '@/store/project'
 import { useUI } from '@/store/ui'
 import { useToast } from '@/store/toast'
+import { useExpiry } from '@/features/pro/useExpiry'
 import { useT } from '@/i18n'
 import { useGenerator } from './useGenerator'
 import { Modal } from '@/components/Modal'
@@ -37,6 +38,7 @@ export function TimetableBoard() {
   const ui = useUI()
   const tr = useT()
   const { running, progress, message, run, stop } = useGenerator()
+  const { isReadOnly } = useExpiry()
 
   const { school, classes, subjects, teachers, rooms, lessons, timetables } = project
   const days = school.workDays
@@ -404,7 +406,7 @@ export function TimetableBoard() {
           </button>
         </div>
 
-        <button onClick={autoFill} disabled={running} className="btn btn-accent h-9 disabled:opacity-50">
+        <button onClick={autoFill} disabled={running || isReadOnly} className="btn btn-accent h-9 disabled:opacity-50">
           {running ? <Wand2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
           {running ? `${tr('Tuzilmoqda')} ${Math.round(progress)}%` : tr('Avtomatik to‘ldirish')}
         </button>
@@ -454,13 +456,13 @@ export function TimetableBoard() {
             <Redo2 size={16} />
           </button>
         </div>
-        <button onClick={blankSheet} className="btn btn-outline h-9" title={tr("Joriy jadvalni nusxaga saqlab, bo'sh varaqdan boshlash")}>
+        <button onClick={blankSheet} disabled={isReadOnly} className="btn btn-outline h-9 disabled:opacity-40" title={tr("Joriy jadvalni nusxaga saqlab, bo'sh varaqdan boshlash")}>
           <FilePlus size={16} /> {tr("Bo'sh varaq")}
         </button>
-        <button onClick={clearClass} className="btn btn-outline h-9">
+        <button onClick={clearClass} disabled={isReadOnly} className="btn btn-outline h-9 disabled:opacity-40">
           <Eraser size={16} /> {tr('Sinfni tozalash')}
         </button>
-        <button onClick={clearAll} className="btn btn-outline h-9 text-danger">
+        <button onClick={clearAll} disabled={isReadOnly} className="btn btn-outline h-9 text-danger disabled:opacity-40">
           <Trash2 size={16} /> {tr('Hammasini tozalash')}
         </button>
 
@@ -507,13 +509,15 @@ export function TimetableBoard() {
                         <td key={d} className="border-b border-l border-border/60 p-0.5">
                           <button
                             onClick={() => {
+                              if (isReadOnly) return
                               if (Date.now() - dragEndAt.current < 250) return
                               placeOrRemove(d, slot)
                             }}
                             onDragOver={(ev) => {
-                              if (ok && dragId) ev.preventDefault()
+                              if (ok && dragId && !isReadOnly) ev.preventDefault()
                             }}
                             onDrop={(ev) => {
+                              if (isReadOnly) return
                               ev.preventDefault()
                               const id = dragId ?? ev.dataTransfer.getData('text/plain')
                               dragEndAt.current = Date.now()
@@ -540,8 +544,9 @@ export function TimetableBoard() {
                                   return (
                                     <span
                                       key={e.id}
-                                      draggable={!e.locked}
+                                      draggable={!e.locked && !isReadOnly}
                                       onDragStart={(ev) => {
+                                        if (isReadOnly) { ev.preventDefault(); return }
                                         ev.stopPropagation()
                                         ev.dataTransfer.setData('text/plain', e.id)
                                         ev.dataTransfer.effectAllowed = 'move'

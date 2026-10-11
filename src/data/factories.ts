@@ -15,8 +15,8 @@ import { APP_VERSION, FILE_VERSION, MAX_LESSONS, DEFAULT_LESSON_MIN, DEFAULT_BRE
 import { uid, minToTime, timeToMin, fullAvailability } from '@/utils'
 
 export const DEFAULT_WORK_DAYS = 6
-/** Standart kuniga maksimal dars soni: 2 navbat × 7 dars = 14 (1234567 1234567). */
-export const DEFAULT_MAX_LESSONS_PER_DAY = 14
+/** Standart kuniga maksimal dars soni. */
+export const DEFAULT_MAX_LESSONS_PER_DAY = 6
 
 /** Dars vaqtlarini avtomatik generatsiya qilish (katta tanaffus bilan) */
 export function generateLessonTimes(
@@ -125,6 +125,7 @@ export function newClass(school: School, name = ''): SchoolClass {
     studentCount: 25,
     shiftIndex: 1,
     building: '1-bino',
+    classTeacherId: '',
     availability: emptyAvail(school),
   }
 }

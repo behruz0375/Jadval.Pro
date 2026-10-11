@@ -11,7 +11,7 @@ export function StatusBar() {
   const lang = useLang((l) => l.lang)
   const setLang = useLang((l) => l.setLang)
   return (
-    <footer className="no-print flex h-11 shrink-0 flex-nowrap items-center gap-x-3 gap-y-1 overflow-x-auto border-t border-border bg-surface px-3 text-sm select-none sm:flex-wrap sm:overflow-x-visible">
+    <footer className="no-print flex h-10 shrink-0 flex-nowrap items-center gap-x-2 gap-y-1 overflow-x-auto border-t border-border bg-surface px-2 text-sm select-none sm:h-11 sm:gap-x-3 sm:px-3 sm:flex-wrap sm:overflow-x-visible">
       {/* Zoom — har doim ko'rinadi */}
       <div className="flex shrink-0 items-center gap-1.5">
         <Search size={15} className="text-muted" />

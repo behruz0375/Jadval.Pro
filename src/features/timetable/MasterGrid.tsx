@@ -168,9 +168,9 @@ export function MasterGrid() {
         </span>
       </div>
 
-      <div className="flex min-h-0 flex-1 gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 md:flex-row">
         {/* Umumiy matritsa — barcha ustunlar */}
-        <div className="min-w-0 flex-1 overflow-auto rounded-xl border border-border bg-surface">
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto rounded-xl border border-border bg-surface" style={{ touchAction: 'pan-x pan-y' }}>
           <table className="border-collapse text-center text-xs">
             <thead>
               <tr>
@@ -230,6 +230,10 @@ export function MasterGrid() {
                         // ProRector uslubi — har katak 3 qator: fan / o'qituvchi / xona
                         const teacher = e ? teachers.find((t) => t.id === e.teacherId) : null
                         const room = e && e.roomId ? rooms.find((r) => r.id === e.roomId) : null
+                        const subjLabel = subj ? (subj.short || subj.name) : ''
+                        const teacherLabel = teacher ? (teacher.short || teacher.fullName.split(' ')[0]) : ''
+                        const roomLabel = room ? (room.short || room.name) : ''
+                        const cellTitle = subj ? `${subj.name}${teacher ? `\n${teacher.fullName}` : ''}${room ? `\n${room.name}` : ''}` : ''
                         return (
                           <td
                             key={x.id}
@@ -244,6 +248,7 @@ export function MasterGrid() {
                               ev.preventDefault()
                               dropHere(d, p)
                             }}
+                            title={cellTitle}
                             className={cx(
                               'border-l border-border/50 p-0.5',
                               canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
@@ -256,8 +261,8 @@ export function MasterGrid() {
                             {subj ? (
                               <div
                                 style={{
-                                  minWidth: ui.compact ? 60 : 72,
-                                  minHeight: ui.compact ? 40 : 52,
+                                  minWidth: ui.compact ? 64 : 80,
+                                  minHeight: ui.compact ? 44 : 56,
                                   background: color
                                     ? ui.gradient
                                       ? `linear-gradient(135deg, ${color}3a, ${color}1f)`
@@ -265,25 +270,25 @@ export function MasterGrid() {
                                     : 'rgba(100,100,100,0.08)',
                                   borderLeft: color ? `3px solid ${color}` : '3px solid rgba(100,100,100,0.3)',
                                 }}
-                                className="mx-auto flex flex-col items-center justify-center gap-[1px] rounded-md px-1 py-0.5 leading-tight"
+                                className="mx-auto flex flex-col items-center justify-center gap-[2px] rounded-md px-1.5 py-1 leading-tight"
                               >
-                                <div className={cx('font-bold text-ink', ui.compact ? 'text-[11px]' : 'text-[12px]')}>
-                                  {subj.short || subj.name}
+                                <div className={cx('font-bold text-ink', ui.compact ? 'text-[11px]' : 'text-[13px]')}>
+                                  {subjLabel}
                                 </div>
                                 {teacher && (
-                                  <div className={cx('truncate text-ink/75', ui.compact ? 'text-[9px]' : 'text-[10px]')}>
-                                    {teacher.short || teacher.fullName.split(' ')[0]}
+                                  <div className={cx('max-w-full truncate text-ink/80', ui.compact ? 'text-[9px]' : 'text-[11px]')}>
+                                    {teacherLabel}
                                   </div>
                                 )}
                                 {room && (
-                                  <div className={cx('font-medium text-ink/60', ui.compact ? 'text-[8px]' : 'text-[9px]')}>
-                                    {room.short || room.name}
+                                  <div className={cx('font-semibold text-ink/60', ui.compact ? 'text-[8px]' : 'text-[10px]')}>
+                                    {roomLabel}
                                   </div>
                                 )}
                               </div>
                             ) : (
                               <div
-                                style={{ minWidth: ui.compact ? 60 : 72, minHeight: ui.compact ? 40 : 52 }}
+                                style={{ minWidth: ui.compact ? 64 : 80, minHeight: ui.compact ? 44 : 56 }}
                                 className="mx-auto grid place-items-center text-[10px] text-muted/25"
                               >
                                 ·
@@ -301,7 +306,7 @@ export function MasterGrid() {
         </div>
 
         {/* Parallel ko'rinish — tanlangan ustun */}
-        <div className="flex w-[21rem] shrink-0 flex-col gap-2">
+        <div className="hidden w-full flex-col gap-2 md:flex md:w-[21rem] md:shrink-0">
           <select
             value={currentId}
             onChange={(e) => setEntityId(e.target.value)}

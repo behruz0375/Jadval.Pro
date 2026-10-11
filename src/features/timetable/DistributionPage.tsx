@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { LayoutGrid, Play, Trash2, CheckCircle2, AlertTriangle, Sparkles, Grid3x3, Zap, Table2, FileSpreadsheet, StopCircle, Wand2, RotateCcw } from 'lucide-react'
+import { LayoutGrid, Play, Trash2, CheckCircle2, AlertTriangle, Sparkles, Grid3x3, Zap, Table2, FileSpreadsheet, StopCircle, Wand2, RotateCcw, Home } from 'lucide-react'
+import { WelcomeLauncher } from '@/features/dashboard/WelcomeLauncher'
 import { useProject } from '@/store/project'
 import { useToast } from '@/store/toast'
 import { useGenerator } from './useGenerator'
@@ -13,6 +14,7 @@ import { cx, uid } from '@/utils'
 import { generateDirect } from '@/features/cloud/api'
 import { countHardViolations, timetableGaps } from '@/features/_shared/compute'
 import { validateProject } from '@/engine/validate'
+import { useExpiry } from '@/features/pro/useExpiry'
 
 export function DistributionPage() {
   const project = useProject((s) => s.project)
@@ -25,6 +27,9 @@ export function DistributionPage() {
   const [mode, setMode] = useState<'board' | 'master' | 'auto'>('board')
   const [optsOpen, setOptsOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [welcomeOpen, setWelcomeOpen] = useState(false)
+
+  const { isReadOnly } = useExpiry()
 
   const { lessons, classes, teachers, timetables } = project
   const totalHours = lessons.reduce((a, l) => a + l.hoursPerWeek, 0)
@@ -47,14 +52,14 @@ export function DistributionPage() {
         `Jadval tuzishga qiyinchiliklar topildi (${check.issues.filter((i) => i.severity === 'error').length} ta xato):\n\n` +
         errorMessages.slice(0, 500) +
         (first?.hint ? '\n\nMaslahat: ' + first.hint : '') +
-        '\n\nDavom etasizmi? (Generator qo‘lidan kelgancha joylashtiradi, qolgani unplaced bo‘lib qoladi)'
+        `\n\nDavom etasizmi? (Generator qo'lidan kelgancha joylashtiradi, qolgani unplaced bo'lib qoladi)`
       if (!confirm(msg)) return
     }
     if (check.issues.length > 0) {
       // Ogohlantirishlar bor — toast'da ko'rsatamiz, oldinga davom ettiramiz
       const warningCount = check.issues.filter((i) => i.severity === 'warning').length
       if (warningCount > 0) {
-        toast.info(`${warningCount} ta ogohlantirish — generator qo‘lidan kelgancha joylashtiradi`)
+        toast.info(`${warningCount} ta ogohlantirish — generator qo’lidan kelgancha joylashtiradi`)
       }
     }
     setOptsOpen(true)
@@ -166,34 +171,41 @@ export function DistributionPage() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-3 p-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="grid h-9 w-9 place-items-center rounded-lg bg-accent/15 text-accent">
+    <div className="flex h-full flex-col gap-2 p-2 sm:gap-3 sm:p-4">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent/15 text-accent">
           <LayoutGrid size={20} />
         </div>
-        <h1 className="text-lg font-bold">Taqsimot — jadval</h1>
-        <div className="ml-2 flex gap-1 rounded-lg bg-surface-2 p-1">
+        <h1 className="text-lg font-bold">Taqsimot</h1>
+        <div className="flex gap-0.5 rounded-lg bg-surface-2 p-0.5 sm:ml-2 sm:gap-1 sm:p-1">
           <button
             onClick={() => setMode('board')}
-            className={cx('flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors', mode === 'board' ? 'bg-accent text-accent-fg' : 'text-muted hover:text-ink')}
+            className={cx('flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors sm:gap-1.5 sm:px-3 sm:text-sm', mode === 'board' ? 'bg-accent text-accent-fg' : 'text-muted hover:text-ink')}
           >
-            <Grid3x3 size={15} /> Tahta (qo‘lda)
+            <Grid3x3 size={15} /> <span className="hidden sm:inline">Tahta</span>
           </button>
           <button
             onClick={() => setMode('master')}
-            className={cx('flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors', mode === 'master' ? 'bg-accent text-accent-fg' : 'text-muted hover:text-ink')}
+            className={cx('flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors sm:gap-1.5 sm:px-3 sm:text-sm', mode === 'master' ? 'bg-accent text-accent-fg' : 'text-muted hover:text-ink')}
           >
-            <Table2 size={15} /> Umumiy
+            <Table2 size={15} /> <span className="hidden sm:inline">Umumiy</span>
           </button>
           <button
             onClick={() => setMode('auto')}
-            className={cx('flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors', mode === 'auto' ? 'bg-accent text-accent-fg' : 'text-muted hover:text-ink')}
+            className={cx('flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors sm:gap-1.5 sm:px-3 sm:text-sm', mode === 'auto' ? 'bg-accent text-accent-fg' : 'text-muted hover:text-ink')}
           >
-            <Zap size={15} /> Avtomatik
+            <Zap size={15} /> <span className="hidden sm:inline">Avtomatik</span>
           </button>
         </div>
-        <button onClick={() => setImportOpen(true)} className="btn btn-outline hover-lift ml-auto h-9" title="Excel taqsimotdan ma'lumot qo'shish (namuna fayl bilan)">
-          <FileSpreadsheet size={15} /> Excel import
+        <button
+          onClick={() => setWelcomeOpen(true)}
+          className="btn btn-outline hover-lift ml-auto h-9"
+          title="Yangi jadval, saqlangan jadvalni ochish yoki namuna yuklash"
+        >
+          <Home size={15} /> <span className="hidden sm:inline">Boshlash</span>
+        </button>
+        <button onClick={() => setImportOpen(true)} className="btn btn-outline hover-lift h-9" title="Excel taqsimotdan ma'lumot qo’shish (namuna fayl bilan)">
+          <FileSpreadsheet size={15} /> <span className="hidden sm:inline">Excel import</span>
         </button>
       </div>
 
@@ -210,17 +222,17 @@ export function DistributionPage() {
       {mode === 'auto' && (
         <>
           {/* Boshqaruv paneli */}
-          <div className="card flex flex-wrap items-center gap-4 p-4">
-            <button onClick={generate} disabled={running} className="btn btn-accent h-11 px-5 text-base disabled:opacity-50">
+          <div className="card flex flex-wrap items-center gap-2 p-2 sm:gap-4 sm:p-4">
+            <button onClick={generate} disabled={running || isReadOnly} className="btn btn-accent h-10 px-3 text-sm disabled:opacity-50 sm:h-11 sm:px-5 sm:text-base" title={isReadOnly ? "Muddat tugagan — faqat ko’rish rejimi" : undefined}>
               {running ? <Sparkles size={18} className="animate-spin" /> : <Play size={18} />}
               {running ? 'Tuzilmoqda...' : 'Jadval tuzish'}
             </button>
-            <button onClick={optimize} disabled={running} className="btn btn-outline h-11 disabled:opacity-50" title="Mavjud jadvalni buzmay o'qituvchi/sinf oynalarini kamaytiradi">
-              <Wand2 size={18} /> Yaxshilash
+            <button onClick={optimize} disabled={running || isReadOnly} className="btn btn-outline h-10 disabled:opacity-50 sm:h-11" title={isReadOnly ? "Muddat tugagan — faqat ko’rish rejimi" : "Mavjud jadvalni buzmay o'qituvchi/sinf oynalarini kamaytiradi"}>
+              <Wand2 size={18} /> <span className="hidden sm:inline">Yaxshilash</span>
             </button>
             {running && (
-              <button onClick={stop} className="btn btn-outline h-11 text-danger" title="To‘xtatish">
-                <StopCircle size={18} /> To‘xtatish
+              <button onClick={stop} className="btn btn-outline h-11 text-danger" title="To’xtatish">
+                <StopCircle size={18} /> To'xtatish
               </button>
             )}
 
@@ -249,7 +261,7 @@ export function DistributionPage() {
             )}
           </div>
 
-          <div className="flex min-h-0 flex-1 gap-3">
+          <div className="flex min-h-0 flex-1 flex-col gap-3 sm:flex-row">
             <div className="flex min-w-0 flex-1 flex-col gap-3">
               {selected ? (
                 <>
@@ -281,7 +293,7 @@ export function DistributionPage() {
               )}
             </div>
 
-            <div className="flex w-52 shrink-0 flex-col gap-2">
+            <div className="flex shrink-0 flex-row gap-2 overflow-x-auto sm:w-52 sm:flex-col sm:overflow-x-visible">
               <h3 className="text-sm font-semibold text-muted">Versiyalar ({timetables.length})</h3>
               <div className="flex flex-col gap-1.5 overflow-y-auto">
                 {timetables.slice().reverse().map((t) => (
@@ -308,6 +320,7 @@ export function DistributionPage() {
                             <RotateCcw size={13} />
                           </button>
                         )}
+                        {!isReadOnly && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
@@ -315,10 +328,11 @@ export function DistributionPage() {
                             if (selectedId === t.id) setSelectedId(null)
                           }}
                           className="text-muted hover:text-danger"
-                          title="O'chirish"
+                          title="O’chirish"
                         >
                           <Trash2 size={13} />
                         </button>
+                        )}
                       </div>
                     </div>
                     <div className="mt-0.5 text-muted">
@@ -334,6 +348,7 @@ export function DistributionPage() {
       )}
       <GenerationOptionsDialog open={optsOpen} onClose={() => setOptsOpen(false)} onStart={runWith} />
       <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
+      {welcomeOpen && <WelcomeLauncher onClose={() => setWelcomeOpen(false)} />}
     </div>
   )
 }

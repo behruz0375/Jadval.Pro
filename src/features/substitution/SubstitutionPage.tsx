@@ -113,7 +113,7 @@ export function SubstitutionPage() {
   }
 
   return (
-    <div className="fade-in flex h-full flex-col gap-4 overflow-y-auto p-4">
+    <div className="fade-in flex flex-col gap-4 p-4 pb-8">
       <div className="flex flex-wrap items-center gap-3">
         <div className="grid h-9 w-9 place-items-center rounded-lg bg-accent/15 text-accent">
           <Replace size={20} />

@@ -229,7 +229,7 @@ export function OwnerLoginModal({ open, onClose }: { open: boolean; onClose: () 
     }
     if (e) setErr(e)
     else {
-      toast.success('Egasi sifatida kirdingiz')
+      toast.success('Admin sifatida kirdingiz')
       onClose()
     }
   }
@@ -238,7 +238,7 @@ export function OwnerLoginModal({ open, onClose }: { open: boolean; onClose: () 
     <>
     <Modal
       open={open && !recoverOpen}
-      title={isSetup ? 'Egasi hisobini yaratish' : 'Egasi (Boshqaruv) kirishi'}
+      title={isSetup ? 'Admin hisobini yaratish' : 'Admin panel — kirish'}
       onClose={onClose}
       width="max-w-sm"
       footer={
@@ -253,12 +253,12 @@ export function OwnerLoginModal({ open, onClose }: { open: boolean; onClose: () 
     >
       {isSetup ? (
         <p className="mb-3 rounded-lg bg-warn/10 px-3 py-2 text-sm text-warn">
-          Birinchi sozlash: bu qurilmada <b>egasi hisobi</b> yaratiladi. Login va parolni eslab qoling —
+          Birinchi sozlash: bu qurilmada <b>admin hisobi</b> yaratiladi. Login va parolni eslab qoling —
           hisobga kirgach, «Hisob» bo'limida <b>tiklash kodi</b> ham oling (parol unutilsa yordam beradi)!
         </p>
       ) : (
         <p className="mb-3 text-sm text-muted">
-          Egasi login va parolini kiriting.
+          Admin login va parolini kiriting.
           {isLegacy && (
             <span className="mt-1 block text-xs text-warn">Eski hisob: login — <b>egasi</b></span>
           )}

@@ -87,7 +87,7 @@ export function printTimetableCards(
         </div>
         <div class="yr">${esc(school.academicYear || '')} o'quv yili</div>
       </div>
-      <h2>${esc(modeTitle)}: ${esc(entityName(id))} — dars jadvali</h2>
+      <h2>${esc(modeTitle)}: ${esc(entityName(id))}${mode === 'class' ? (() => { const cls = classes.find((c) => c.id === id); const ct = cls?.classTeacherId ? teachers.find((t) => t.id === cls.classTeacherId) : undefined; return ct ? ` — Sinf rahbari: ${esc(ct.short)}` : '' })() : ''} — dars jadvali</h2>
       <table><thead>${head}</thead><tbody>${body}</tbody></table>
       <div class="sign">
         <div>Tuzdi: ${esc(school.oibdo || '______________')}</div>

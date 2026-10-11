@@ -10,6 +10,7 @@ import { PanelHost } from './PanelHost'
 import { SearchPalette } from './SearchPalette'
 import { WelcomeLauncher } from '@/features/dashboard/WelcomeLauncher'
 import { useT } from '@/i18n'
+import { cx } from '@/utils'
 
 export function Shell() {
   const zoom = useUI((s) => s.zoom)
@@ -61,6 +62,9 @@ export function Shell() {
     return () => window.removeEventListener('keydown', onKey)
   }, [setSearchOpen])
 
+  const mobileSidebarOpen = useUI((s) => s.mobileSidebarOpen)
+  const setMobileSidebarOpen = useUI((s) => s.setMobileSidebarOpen)
+
   const t = useT()
   const home = role === 'owner' ? 'owner' : 'dashboard'
   const label = findPanel(activePanel)?.label ?? ''
@@ -74,17 +78,24 @@ export function Shell() {
     <div className="jadvalpro-shell flex flex-col bg-bg" style={{ height: '100dvh' }}>
       <TopBar />
       <div className="flex min-h-0 flex-1">
+        {/* Mobil sidebar uchun qoraytirilgan fon */}
+        {mobileSidebarOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm sm:hidden"
+            onClick={() => setMobileSidebarOpen(false)}
+          />
+        )}
         <Sidebar />
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {/* Orqaga paneli */}
-          <div className="no-print flex h-10 shrink-0 items-center gap-2 border-b border-border bg-surface/60 px-3 backdrop-blur">
+          <div className="no-print flex h-10 shrink-0 items-center gap-1 border-b border-border bg-surface/60 px-2 backdrop-blur sm:gap-2 sm:px-3">
             <button
               onClick={back}
               disabled={history.length === 0}
-              className="btn btn-ghost hover-lift h-7 px-2 text-sm disabled:opacity-40"
+              className="btn btn-ghost hover-lift h-7 px-1.5 text-sm disabled:opacity-40 sm:px-2"
               title="Orqaga"
             >
-              <ArrowLeft size={16} /> {t('Orqaga')}
+              <ArrowLeft size={16} /> <span className="hidden sm:inline">{t('Orqaga')}</span>
             </button>
             {!isHome && (
               <button onClick={() => setActivePanel(home)} className="btn btn-ghost h-7 w-7 p-0" title="Bosh sahifa">
@@ -92,12 +103,12 @@ export function Shell() {
               </button>
             )}
             <span className="text-sm text-muted">/</span>
-            <span className="text-sm font-medium">{t(label)}</span>
+            <span className="truncate text-sm font-medium">{t(label)}</span>
           </div>
 
           <div
-            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
-            style={{ WebkitOverflowScrolling: 'touch' }}
+            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
+            style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehavior: 'contain' }}
           >
             {applyZoom ? (
               <div style={{ zoom: zoom / 100 }}>

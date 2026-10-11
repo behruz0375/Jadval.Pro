@@ -4,8 +4,10 @@ import { OwnerLoginModal } from './AuthScreens'
 import { useAuth } from '@/store/auth'
 import { useToast } from '@/store/toast'
 import { BackgroundSlideshow } from '@/components/BackgroundSlideshow'
+import { LangSwitcher } from '@/components/LangSwitcher'
 import { telegramUrl } from '@/utils'
 import { APP_VERSION } from '@/constants'
+import { useT } from '@/i18n'
 
 export type PickRole = 'director' | 'teacher' | 'student'
 
@@ -40,22 +42,23 @@ export function ChooseRole({
   onBack?: () => void
   onPick: (role: PickRole) => void
 }) {
+  const t = useT()
   const [ownerOpen, setOwnerOpen] = useState(false)
   const ownerContact = useAuth((s) => s.ownerContact)
   const machineCode = useAuth((s) => s.machineCode)
   const toast = useToast()
 
   const buyProgram = async () => {
-    const msg = `Assalomu alaykum! JadvalPro dasturini sotib olmoqchiman.\nMaxsus kod: ${machineCode}`
+    const msg = `${t('Assalomu alaykum! JadvalPro dasturini sotib olmoqchiman.')}\n${t('Maxsus kod')}: ${machineCode}`
     try {
       await navigator.clipboard.writeText(msg)
-      toast.success('Xabar nusxalandi — Telegramga joylang')
+      toast.success(t('Xabar nusxalandi — Telegramga joylang'))
     } catch {
       /* ignore */
     }
     const url = telegramUrl(ownerContact.telegram)
     if (!url) {
-      toast.error("Admin aloqa ma'lumoti kiritilmagan")
+      toast.error(t("Admin aloqa ma'lumoti kiritilmagan"))
       return
     }
     window.open(url, '_blank')
@@ -72,21 +75,26 @@ export function ChooseRole({
       </div>
 
       <div className="relative z-10 w-full max-w-4xl">
-        {onBack && (
-          <button onClick={onBack} className="btn btn-ghost hover-lift mb-4 backdrop-blur">
-            <ArrowLeft size={16} /> Orqaga
-          </button>
-        )}
+        <div className="mb-4 flex items-center justify-between gap-2">
+          {onBack ? (
+            <button onClick={onBack} className="btn btn-ghost hover-lift backdrop-blur">
+              <ArrowLeft size={16} /> {t('Orqaga')}
+            </button>
+          ) : (
+            <span />
+          )}
+          <LangSwitcher />
+        </div>
 
         <div className="mb-8 text-center">
           <div className="anim-rise mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-accent text-accent-fg text-3xl font-black shadow-panel">
             J
           </div>
           <h1 className="anim-rise text-3xl font-black sm:text-4xl" style={{ animationDelay: '0.08s' }}>
-            Kim sifatida <span className="text-gradient">kirasiz?</span>
+            {t('Kim sifatida')} <span className="text-gradient">{t('kirasiz?')}</span>
           </h1>
           <p className="anim-rise mt-2 text-muted" style={{ animationDelay: '0.16s' }}>
-            Har bir rol o'z logini va paroli bilan kiradi
+            {t("Har bir rol o'z logini va paroli bilan kiradi")}
           </p>
         </div>
 
@@ -105,10 +113,10 @@ export function ChooseRole({
                   <div className="grid h-14 w-14 place-items-center rounded-2xl bg-accent/15 text-accent transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6">
                     <Icon size={28} />
                   </div>
-                  <h2 className="mt-4 text-xl font-bold">{r.title}</h2>
-                  <p className="mt-1.5 text-sm text-muted">{r.text}</p>
+                  <h2 className="mt-4 text-xl font-bold">{t(r.title)}</h2>
+                  <p className="mt-1.5 text-sm text-muted">{t(r.text)}</p>
                   <span className="mt-4 inline-flex items-center gap-1.5 font-semibold text-accent">
-                    Kirish <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
+                    {t('Kirish')} <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
                   </span>
                 </div>
               </button>
@@ -124,13 +132,13 @@ export function ChooseRole({
           >
             <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
               <ShoppingBag size={16} className="text-accent" />
-              Dasturni sotib olishni istaysizmi?
+              {t('Dasturni sotib olishni istaysizmi?')}
             </span>
             <button
               onClick={buyProgram}
               className="btn hover-lift bg-[#2AABEE] text-white hover:brightness-110"
             >
-              <Send size={15} /> Adminga Telegramda yozing
+              <Send size={15} /> {t('Adminga Telegramda yozing')}
             </button>
           </div>
         )}
@@ -140,7 +148,7 @@ export function ChooseRole({
           className="anim-rise mx-auto mt-6 flex items-center gap-2 rounded-lg px-4 py-2 text-sm text-muted transition-colors hover:text-accent"
           style={{ animationDelay: '0.48s' }}
         >
-          <ShieldCheck size={15} /> Boshqaruv — Admin (dastur egasi) kirishi
+          <ShieldCheck size={15} /> {t('Admin panel')}
         </button>
 
         <p className="mt-4 text-center text-xs text-muted">{APP_VERSION}</p>

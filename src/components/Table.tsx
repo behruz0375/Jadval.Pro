@@ -89,7 +89,7 @@ export function Table<T>({
                   key={c.key}
                   style={{ width: c.width }}
                   className={cx(
-                    'border-b border-border px-3 py-2 font-semibold',
+                    'whitespace-nowrap border-b border-border px-2 py-2 font-semibold sm:px-3',
                     c.align === 'right' && 'text-right',
                     c.align === 'center' && 'text-center',
                   )}
@@ -135,7 +135,7 @@ export function Table<T>({
                       <td
                         key={c.key}
                         className={cx(
-                          'px-3 py-2',
+                          'whitespace-nowrap px-2 py-2 sm:px-3',
                           c.align === 'right' && 'text-right tabular-nums',
                           c.align === 'center' && 'text-center',
                         )}

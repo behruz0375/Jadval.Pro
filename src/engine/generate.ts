@@ -289,6 +289,10 @@ function generateOnce(
   /** Har sinf kuniga nechta dars tuzilganini hisobi (maxLessonsPerClassDay cheklovi uchun) */
   const classDayLessonCount = new Map<string, number>() // `${classId}:${day}` -> hisob
 
+  /** Indexed lookups: O(1) placement topish (ejection chain uchun) */
+  const placementAtClassSlot = new Map<string, Placement>()   // key(classId, day, period) -> placement
+  const placementAtTeacherSlot = new Map<string, Placement>() // key(teacherId, day, period) -> placement
+
   const canPlace = (s: Session, d: number, start: number): boolean => {
     if (start + s.length - 1 > maxP) return false
     // 1) O'qituvchining kunlik sig'imi (dailyCapacity) va haftalik normasi (weeklyMax)
@@ -361,8 +365,16 @@ function generateOnce(
     const delta = on ? 1 : -1
     for (let k = 0; k < pl.session.length; k++) {
       const p = pl.start + k
-      for (const cid of pl.session.classIds) toggle(classBusy, key(cid, pl.day, p), on)
-      for (const tid of pl.session.teacherIds) toggle(teacherBusy, key(tid, pl.day, p), on)
+      for (const cid of pl.session.classIds) {
+        toggle(classBusy, key(cid, pl.day, p), on)
+        if (on) placementAtClassSlot.set(key(cid, pl.day, p), pl)
+        else placementAtClassSlot.delete(key(cid, pl.day, p))
+      }
+      for (const tid of pl.session.teacherIds) {
+        toggle(teacherBusy, key(tid, pl.day, p), on)
+        if (on) placementAtTeacherSlot.set(key(tid, pl.day, p), pl)
+        else placementAtTeacherSlot.delete(key(tid, pl.day, p))
+      }
       if (pl.roomId) toggle(roomBusy, key(pl.roomId, pl.day, p), on)
     }
     for (const cid of pl.session.classIds) {
@@ -385,50 +397,113 @@ function generateOnce(
     }
   }
 
-  // Joylashuv sifatini baholovchi (kichikroq = yaxshiroq)
-  //  - og'ir fan ertalab
-  //  - shu fan shu kuni takrorlanmasin (spread)
-  //  - sinf va o'qituvchi uchun qo'shni band — bo'shliq (oyna) kamayadi
-  //  - ketma-ket kunlarda bir dars qaytarilmasin — "o'quvchi charchamasin"
-  //  - juda chet slotlardan (1 yoki oxirgi) ozroq qoching — tarbiyaviy soat
+  // ================================================================
+  // AQLLI slot tanlash heuristikasi (kichikroq = yaxshiroq)
+  //  1) Og'ir fanlar 2-4-soat, yengil fanlar kechroq
+  //  2) Fan kunlar bo'ylab tarqalishi (shu fan shu kunda takror bo'lmasin)
+  //  3) O'qituvchi yuki kunlar bo'ylab muvozanat (6-1 emas, 3-4 bo'lsin)
+  //  4) Sinf jadvali zich (oyna/bo'shliq kam)
+  //  5) O'qituvchi jadvali zich (darcha kam)
+  //  6) Juft darslar ketma-ket slotlarda
+  // ================================================================
   const slotCost = (s: Session, d: number, start: number): number => {
     let cost = 0
-    // Og'ir fan kech soatlarda — jarima
-    if (s.weight >= 7 && start >= 5) cost += (start - 4) * morningWeight
-    // Og'ir fan juda erta (1-soat) — kichik jarima
-    if (s.weight >= 8 && start === 1) cost += 1
-    // Yengil fanni ertalabga qo'ymaslik — kichik jarima (teskari rag'bat)
-    if (s.weight <= 3 && start <= 2 && morningWeight > 0) cost += 0.5
-    // Shu fan shu kuni allaqachon bo'lsa — tarqatish uchun jarima
+
+    // --- 1) Og'ir/yengil fan slot tartibi ---
+    // Og'ir fanlar (Matematika, Fizika: weight >= 7) eng yaxshi 2-4-soatda
+    if (s.weight >= 7) {
+      if (start >= 2 && start <= 4) cost -= 1          // ideal slot — bonus
+      else if (start >= 5) cost += (start - 4) * morningWeight  // kech — jarima
+      if (start === 1) cost += 1                        // 1-soat biroz erta
+    }
+    // Yengil fanlar (Tarbiyaviy, Sport, San'at: weight <= 3) 1-2 soatga qo'yilmasin
+    if (s.weight <= 3 && morningWeight > 0) {
+      if (start === 1) cost += morningWeight * 1.5      // 1-soat — katta jarima
+      if (start === 2) cost += morningWeight * 0.5      // 2-soat — kichik jarima
+      if (start >= 5) cost -= 0.3                       // kechroq slot — yengil fan uchun bonus
+    }
+
+    // --- 2) Fan tarqalishi — shu fan shu kunda takrorlanmasin ---
     if (spreadDays) {
       for (const cid of s.classIds) {
         const cnt = subjPerDay.get(`${cid}:${d}:${s.subjectId}`) ?? 0
-        if (cnt > 0) cost += spreadWeight * cnt
+        if (cnt > 0) cost += spreadWeight * cnt * 1.5   // kuchliroq jarima
       }
-      // AQLLI: shu dars (lessonId) kecha ham bo'lgan bo'lsa — ketma-ket kun bo'lmasligi uchun jarima
+      // Ketma-ket kunlarda takrorlanish (dushanba-seshanba) — tarqalsin
       for (const cid of s.classIds) {
-        const yesterdayCnt = classLessonDayCount.get(`${cid}:${d - 1}:${s.lessonId}`) ?? 0
-        if (yesterdayCnt > 0) cost += spreadWeight * 0.5
-        const tomorrowCnt = classLessonDayCount.get(`${cid}:${d + 1}:${s.lessonId}`) ?? 0
-        if (tomorrowCnt > 0) cost += spreadWeight * 0.5
+        if (d > 0) {
+          const yesterdayCnt = classLessonDayCount.get(`${cid}:${d - 1}:${s.lessonId}`) ?? 0
+          if (yesterdayCnt > 0) cost += spreadWeight * 0.5
+        }
+        if (d < days - 1) {
+          const tomorrowCnt = classLessonDayCount.get(`${cid}:${d + 1}:${s.lessonId}`) ?? 0
+          if (tomorrowCnt > 0) cost += spreadWeight * 0.5
+        }
       }
     }
-    // Sinf uchun bo'shliqni kamaytirish: shu kuni qo'shni band slot bo'lsa — rag'bat
+
+    // --- 3) O'qituvchi yuki muvozanati — kunlar bo'ylab teng taqsimlash ---
+    for (const tid of s.teacherIds) {
+      const te = teacherById.get(tid)
+      if (!te) continue
+      const dayCnt = teacherDayCount.get(`${tid}:${d}`) ?? 0
+      // Idealga yaqin: weeklyMax / days. Undan ortiq bo'lsa jarima.
+      const capacity = te.weeklyMax > 0 ? te.weeklyMax : (te.dailyCapacity > 0 ? te.dailyCapacity * days : 30)
+      const idealPerDay = capacity / days
+      if (dayCnt >= idealPerDay + 1) {
+        cost += (dayCnt - idealPerDay) * 0.8             // ortiqcha yuk — jarima
+      } else if (dayCnt === 0) {
+        cost -= 0.5                                       // bo'sh kun — bonus (teng taqsimlash)
+      }
+    }
+
+    // --- 4) Sinf jadvalining zichligi — oynalarni kamaytirish ---
     if (minimizeGaps) {
       for (const cid of s.classIds) {
-        const adj =
-          classBusy.has(key(cid, d, start - 1)) || classBusy.has(key(cid, d, start + s.length))
-        if (adj) cost -= gapWeight
+        // Qo'shni band slot — rag'bat
+        const adjBefore = classBusy.has(key(cid, d, start - 1))
+        const adjAfter = classBusy.has(key(cid, d, start + s.length))
+        if (adjBefore || adjAfter) cost -= gapWeight
+        if (adjBefore && adjAfter) cost -= gapWeight * 0.5 // ikki tomondan — ekstra bonus
+
+        // Oyna (gap) yaratish tekshiruvi: eng yaqin band slotga masofa
+        const dayLessons = classDayLessonCount.get(`${cid}:${d}`) ?? 0
+        if (dayLessons > 0 && !adjBefore && !adjAfter) {
+          // Eng yaqin band slotga masofa
+          let nearestDist = maxP
+          for (let p = start - 1; p >= 1; p--) {
+            if (classBusy.has(key(cid, d, p))) { nearestDist = start - p - 1; break }
+          }
+          for (let p = start + s.length; p <= maxP; p++) {
+            if (classBusy.has(key(cid, d, p))) { nearestDist = Math.min(nearestDist, p - start - s.length); break }
+          }
+          if (nearestDist >= 2) cost += nearestDist * gapWeight * 0.5  // katta oyna — jarima
+        }
       }
-      // O'qituvchining ham bo'shligi — o'qituvchi dars ketma-ket bo'lsa yaxshi
+
+      // --- 5) O'qituvchi darcha kamayishi ---
       for (const tid of s.teacherIds) {
         const adjT =
           teacherBusy.has(key(tid, d, start - 1)) || teacherBusy.has(key(tid, d, start + s.length))
         if (adjT) cost -= gapWeight * 0.75
+        // O'qituvchi uchun ham oyna tekshiruvi
+        const tDayCnt = teacherDayCount.get(`${tid}:${d}`) ?? 0
+        if (tDayCnt > 0 && !adjT) {
+          let tNearestDist = maxP
+          for (let p = start - 1; p >= 1; p--) {
+            if (teacherBusy.has(key(tid, d, p))) { tNearestDist = start - p - 1; break }
+          }
+          for (let p = start + s.length; p <= maxP; p++) {
+            if (teacherBusy.has(key(tid, d, p))) { tNearestDist = Math.min(tNearestDist, p - start - s.length); break }
+          }
+          if (tNearestDist >= 2) cost += tNearestDist * gapWeight * 0.3
+        }
       }
     }
-    // Oxirgi slotlar: og'ir fan bo'lmasa ham, oxirgi slot biroz past baholanadi
+
+    // --- 6) Oxirgi slot jarimasi ---
     if (start + s.length - 1 >= maxP - 1) cost += 0.3
+
     return cost
   }
 
@@ -617,12 +692,12 @@ function generateOnce(
       const p = start + k
       for (const cid of s.classIds) {
         if (!classAllowed.get(cid)?.has(d * 100 + p)) return 99
-        const pl = placements.find((x) => occupies(x, cid, d, p))
+        const pl = placementAtClassSlot.get(key(cid, d, p))
         if (pl) blockers.add(pl.session.id)
       }
       for (const tid of s.teacherIds) {
         if (!teacherAllowed(tid, d, p)) return 99
-        const pl = placements.find((x) => x.session.teacherIds.includes(tid) && occupiesSlot(x, d, p))
+        const pl = placementAtTeacherSlot.get(key(tid, d, p))
         if (pl) blockers.add(pl.session.id)
       }
     }
@@ -631,20 +706,20 @@ function generateOnce(
 
   function findSingleBlocker(s: Session, d: number, start: number): Placement | null {
     const ids = new Set<string>()
+    let found: Placement | null = null
     for (let k = 0; k < s.length; k++) {
       const p = start + k
       for (const cid of s.classIds) {
-        const pl = placements.find((x) => occupies(x, cid, d, p))
-        if (pl) ids.add(pl.session.id)
+        const pl = placementAtClassSlot.get(key(cid, d, p))
+        if (pl) { ids.add(pl.session.id); found = pl }
       }
       for (const tid of s.teacherIds) {
-        const pl = placements.find((x) => x.session.teacherIds.includes(tid) && occupiesSlot(x, d, p))
-        if (pl) ids.add(pl.session.id)
+        const pl = placementAtTeacherSlot.get(key(tid, d, p))
+        if (pl) { ids.add(pl.session.id); found = pl }
       }
     }
     if (ids.size !== 1) return null
-    const id = [...ids][0]
-    return placements.find((x) => x.session.id === id) ?? null
+    return found
   }
 
   function occupies(pl: Placement, cid: string, d: number, p: number): boolean {
@@ -732,19 +807,19 @@ function generateOnce(
   }
 
   function findBlockers(s: Session, d: number, start: number): Placement[] {
-    const ids = new Set<string>()
+    const found = new Map<string, Placement>()
     for (let k = 0; k < s.length; k++) {
       const p = start + k
       for (const cid of s.classIds) {
-        const pl = placements.find((x) => occupies(x, cid, d, p))
-        if (pl) ids.add(pl.session.id)
+        const pl = placementAtClassSlot.get(key(cid, d, p))
+        if (pl) found.set(pl.session.id, pl)
       }
       for (const tid of s.teacherIds) {
-        const pl = placements.find((x) => x.session.teacherIds.includes(tid) && occupiesSlot(x, d, p))
-        if (pl) ids.add(pl.session.id)
+        const pl = placementAtTeacherSlot.get(key(tid, d, p))
+        if (pl) found.set(pl.session.id, pl)
       }
     }
-    return [...ids].map((id) => placements.find((x) => x.session.id === id)!).filter(Boolean)
+    return [...found.values()]
   }
 
   const stillUnplaced2: Session[] = []
@@ -753,8 +828,184 @@ function generateOnce(
   }
 
   // 3-bosqich: 3-chuqur ejection chain (eng qiyin holatlar)
+  const stillUnplaced3: Session[] = []
   for (const s of stillUnplaced2) {
-    tryPlaceWithChainEjection(s, 3)
+    if (!tryPlaceWithChainEjection(s, 3)) stillUnplaced3.push(s)
+  }
+
+  // 4-bosqich: 4-chuqur ejection chain (eng extreme — katta loyihalar uchun kritik)
+  const stillUnplaced4: Session[] = []
+  for (const s of stillUnplaced3) {
+    if (!tryPlaceWithChainEjection(s, 4)) stillUnplaced4.push(s)
+  }
+
+  // 5-bosqich: Final-chance — yumshoq cheklovlarsiz (faqat qat'iy) joylashtirish
+  // Qolgan darslarni ixtiyoriy bo'sh slotga joylashtiramiz
+  for (const s of stillUnplaced4) {
+    let placed = false
+    for (let d = 0; d < days && !placed; d++) {
+      for (let p = 1; p + s.length - 1 <= maxP && !placed; p++) {
+        if (canPlace(s, d, p)) {
+          const room = pickRoom(s, d, p)
+          if (room.ok) {
+            const pl: Placement = { session: s, day: d, start: p, roomId: room.roomId }
+            placements.push(pl)
+            occupy(pl, true)
+            placed = true
+          }
+        }
+      }
+    }
+  }
+
+  onSnapshot?.(assemble()) // ejection natijasi — SA oldin
+
+  // 6-bosqich: Simulated Annealing — joylashtirilgan darslarni aqlli optimallashtirish
+  //  - Tasodifiy ko'chirish (move) va o'rin almashish (swap)
+  //  - O'qituvchi darcha, sinf oyna, fan tarqalishi, yuk muvozanati — barchasini yaxshilaydi
+  onProgress?.(80, 'Optimallashtirish...')
+  const saIter = Math.min(4000, Math.max(500, placements.length * 8))
+  let saTemp = 4.0
+  const saCoolRate = Math.pow(0.005 / 4.0, 1 / saIter)
+
+  // SA uchun mahalliy baholash: slotCost + o'qituvchi darcha + sinf oyna
+  const saScore = (sess: Session, dd: number, ss: number): number => {
+    let sc = slotCost(sess, dd, ss)
+    // O'qituvchi darchasi (gap) — shu kunda
+    for (const tid of sess.teacherIds) {
+      const periods: number[] = []
+      for (let p = 1; p <= maxP; p++) {
+        if (teacherBusy.has(key(tid, dd, p))) periods.push(p)
+      }
+      if (periods.length >= 2) {
+        const gap = periods[periods.length - 1] - periods[0] + 1 - periods.length
+        sc += gap * 0.5
+      }
+    }
+    // Sinf oynasi — shu kunda
+    for (const cid of sess.classIds) {
+      const periods: number[] = []
+      for (let p = 1; p <= maxP; p++) {
+        if (classBusy.has(key(cid, dd, p))) periods.push(p)
+      }
+      if (periods.length >= 2) {
+        const gap = periods[periods.length - 1] - periods[0] + 1 - periods.length
+        sc += gap * 0.3
+      }
+    }
+    return sc
+  }
+
+  for (let it = 0; it < saIter; it++) {
+    if (it % 200 === 0) onProgress?.(80 + (it / saIter) * 15, `Optimallashtirish... ${Math.round((it / saIter) * 100)}%`)
+
+    const idx = Math.floor(rng() * placements.length)
+    const pl = placements[idx]
+    if ((pl.session as unknown as { _pinned?: boolean })._pinned) { saTemp *= saCoolRate; continue }
+
+    const oldDay = pl.day
+    const oldStart = pl.start
+    const oldRoom = pl.roomId
+
+    // Ikki strategiya: ko'chirish (move) yoki almashish (swap)
+    const doSwap = rng() < 0.25 && placements.length > 1
+
+    if (doSwap) {
+      // Ikki darsni o'rin almashish (cross-day swap)
+      let idx2 = Math.floor(rng() * placements.length)
+      if (idx2 === idx) idx2 = (idx2 + 1) % placements.length
+      const pl2 = placements[idx2]
+      if ((pl2.session as unknown as { _pinned?: boolean })._pinned || pl2.session.length !== pl.session.length) {
+        saTemp *= saCoolRate; continue
+      }
+
+      const old2Day = pl2.day; const old2Start = pl2.start; const old2Room = pl2.roomId
+      const oldScore1 = saScore(pl.session, oldDay, oldStart)
+      const oldScore2 = saScore(pl2.session, old2Day, old2Start)
+
+      occupy(pl, false); occupy(pl2, false)
+
+      // Swap: pl -> pl2 joyiga, pl2 -> pl joyiga
+      if (canPlace(pl.session, old2Day, old2Start) && canPlace(pl2.session, oldDay, oldStart)) {
+        const room1 = pickRoom(pl.session, old2Day, old2Start)
+        const room2 = pickRoom(pl2.session, oldDay, oldStart)
+        if (room1.ok && room2.ok) {
+          pl.day = old2Day; pl.start = old2Start; pl.roomId = room1.roomId
+          occupy(pl, true)
+          pl2.day = oldDay; pl2.start = oldStart; pl2.roomId = room2.roomId
+          occupy(pl2, true)
+
+          const newScore1 = saScore(pl.session, pl.day, pl.start)
+          const newScore2 = saScore(pl2.session, pl2.day, pl2.start)
+          const delta = (newScore1 + newScore2) - (oldScore1 + oldScore2)
+
+          if (delta < 0 || rng() < Math.exp(-delta / Math.max(saTemp, 0.001))) {
+            saTemp *= saCoolRate; continue // Qabul qilindi
+          }
+          // Rad — qaytarish
+          occupy(pl, false); occupy(pl2, false)
+          pl.day = oldDay; pl.start = oldStart; pl.roomId = oldRoom
+          pl2.day = old2Day; pl2.start = old2Start; pl2.roomId = old2Room
+          occupy(pl, true); occupy(pl2, true)
+          saTemp *= saCoolRate; continue
+        }
+      }
+      // Swap amalga oshmadi — qaytarish
+      occupy(pl, true); occupy(pl2, true)
+      // pl va pl2 day/start o'zgarmagan (faqat canPlace muvaffaqiyatsiz bo'lgan)
+      saTemp *= saCoolRate; continue
+    }
+
+    // Oddiy ko'chirish (move) — tasodifiy yangi slot
+    const oldScore = saScore(pl.session, oldDay, oldStart)
+    occupy(pl, false)
+
+    // O'qituvchi yuki muvozanati: past yukli kunga ko'chirish imtiyoz
+    let nd: number; let np: number
+    if (rng() < 0.3) {
+      // Aqlli tanlov: eng kam yukli kunni topish
+      let minLoad = Infinity; let bestDay = 0
+      for (let dd = 0; dd < days; dd++) {
+        let load = 0
+        for (const tid of pl.session.teacherIds) {
+          load += teacherDayCount.get(`${tid}:${dd}`) ?? 0
+        }
+        if (load < minLoad) { minLoad = load; bestDay = dd }
+      }
+      nd = bestDay
+      np = 1 + Math.floor(rng() * Math.max(1, maxP - pl.session.length + 1))
+    } else {
+      nd = Math.floor(rng() * days)
+      np = 1 + Math.floor(rng() * Math.max(1, maxP - pl.session.length + 1))
+    }
+
+    if (nd === oldDay && np === oldStart) {
+      occupy(pl, true); saTemp *= saCoolRate; continue
+    }
+
+    if (canPlace(pl.session, nd, np)) {
+      const room = pickRoom(pl.session, nd, np)
+      if (room.ok) {
+        pl.day = nd; pl.start = np; pl.roomId = room.roomId
+        occupy(pl, true)
+
+        const newScore = saScore(pl.session, nd, np)
+        const delta = newScore - oldScore
+
+        if (delta < 0 || rng() < Math.exp(-delta / Math.max(saTemp, 0.001))) {
+          saTemp *= saCoolRate; continue // Qabul qilindi
+        }
+        // Rad — qaytarish
+        occupy(pl, false)
+        pl.day = oldDay; pl.start = oldStart; pl.roomId = oldRoom
+        occupy(pl, true)
+        saTemp *= saCoolRate; continue
+      }
+    }
+    // canPlace muvaffaqiyatsiz — qaytarish
+    pl.day = oldDay; pl.start = oldStart; pl.roomId = oldRoom
+    occupy(pl, true)
+    saTemp *= saCoolRate
   }
 
   onProgress?.(95, 'Yakunlanmoqda...')
@@ -800,7 +1051,7 @@ export function improveTimetable(
   onSnapshot?: SnapshotFn,
 ): TimetableVersion {
   const rng = mulberry32(opts.seed ?? 20260)
-  const { school, classes, teachers, lessons } = project
+  const { school, classes, subjects, teachers, lessons } = project
   const days = school.workDays
   const maxP = school.maxLessonsPerDay
   const classById = new Map(classes.map((c) => [c.id, c]))
@@ -873,9 +1124,29 @@ export function improveTimetable(
     tid ? gapOf(entries.filter((e) => (e.teacherId === tid || e.teacher2Id === tid) && e.day === d).map((e) => e.slot)) : 0
 
   const movable = entries.filter((e) => !e.locked && !lessonById.get(e.lessonId)?.consecutive)
-  const N = Math.min(4000, Math.max(400, movable.length * 25))
+  const N = Math.min(6000, Math.max(600, movable.length * 30))
 
   const totalRequired = lessons.reduce((a, l) => a + l.hoursPerWeek * Math.max(1, l.classIds.length), 0)
+
+  // --- Kengaytirilgan baholash --- O'qituvchi yuki muvozanati
+  const teacherDayLoadCount = (tid: string | undefined, d: number): number => {
+    if (!tid) return 0
+    return new Set(entries.filter((o) => (o.teacherId === tid || o.teacher2Id === tid) && o.day === d).map((o) => o.slot)).size
+  }
+  /** O'qituvchi kunlik yuk dispersiyasi (kichik = yaxshi, teng taqsimlangan) */
+  const teacherLoadImbalance = (tid: string | undefined): number => {
+    if (!tid) return 0
+    const loads: number[] = []
+    for (let d = 0; d < days; d++) loads.push(teacherDayLoadCount(tid, d))
+    const avg = loads.reduce((a, b) => a + b, 0) / Math.max(days, 1)
+    return loads.reduce((a, b) => a + (b - avg) ** 2, 0) / Math.max(days, 1)
+  }
+  /** Fan tarqalishi baholanishi — shu classId uchun shu fan bir kunda necha marta */
+  const subjectDaySpread = (classId: string, d: number, subjId: string | undefined): number => {
+    if (!subjId) return 0
+    return entries.filter((o) => o.classId === classId && o.day === d && lessonById.get(o.lessonId)?.subjectId === subjId).length
+  }
+
   // Joriy entries'dan TimetableVersion yig'ish (yakuniy + best-so-far). entries nusxalanadi.
   const buildVersion = (): TimetableVersion => {
     const cids = new Set(entries.map((e) => e.classId))
@@ -883,6 +1154,9 @@ export function improveTimetable(
     for (const cid of cids) for (let d = 0; d < days; d++) soft += classDayGap(cid, d) * 2
     let gaps = 0
     for (const t of teachers) for (let d = 0; d < days; d++) gaps += teacherDayGap(t.id, d)
+    // O'qituvchi yuki muvozanati qo'shiladi
+    let imbalance = 0
+    for (const t of teachers) imbalance += teacherLoadImbalance(t.id)
     return {
       id: 'tt_' + Date.now().toString(36),
       name: 'Ishchi jadval',
@@ -892,10 +1166,32 @@ export function improveTimetable(
         placed: entries.length,
         unplaced: Math.max(0, totalRequired - entries.length),
         hardViolations: countHardViolations(entries),
-        softPenalty: soft,
+        softPenalty: soft + Math.round(imbalance),
         teacherGaps: gaps,
       },
     }
+  }
+
+  /** Bir entry uchun mahalliy sifat bali (kichik = yaxshi) */
+  const entryCost = (e: TimetableEntry): number => {
+    let cost = 0
+    const t1 = e.teacherId; const t2 = e.teacher2Id
+    // Sinf oynasi
+    cost += classDayGap(e.classId, e.day) * 2
+    // O'qituvchi darchasi
+    cost += teacherDayGap(t1, e.day) + teacherDayGap(t2, e.day)
+    // O'qituvchi yuk muvozanati
+    cost += teacherLoadImbalance(t1) * 0.3 + teacherLoadImbalance(t2) * 0.3
+    // Fan tarqalishi: bir kunda bir fan 2+ marta bo'lsa jarima
+    const subjOfE = lessonById.get(e.lessonId)?.subjectId
+    const spread = subjectDaySpread(e.classId, e.day, subjOfE)
+    if (spread > 1) cost += (spread - 1) * 3
+    // Og'ir fan slot tartibi
+    const subj = subjOfE ? subjects.find((s) => s.id === subjOfE) : undefined
+    const weight = subj?.weight ?? 5
+    if (weight >= 7 && (e.slot < 2 || e.slot > 4)) cost += 0.5
+    if (weight <= 3 && e.slot <= 1) cost += 0.5
+    return cost
   }
 
   const snapEvery = Math.max(50, Math.floor(N / 10))
@@ -903,13 +1199,65 @@ export function improveTimetable(
 
   // Simulated Annealing — avval best-swap, keyin ba'zan yomonroq ham qabul qilish bilan
   // optima'dan chiqishga imkon beradi. T boshlanishda yuqori, oxirgacha sovitiladi.
-  const T0 = 3.0      // boshlang'ich temperatura — kattaroqda eratta chiqadi
-  const Tmin = 0.01   // minimal temperatura — oxirida deyarli greedy
+  const T0 = 4.0      // boshlang'ich temperatura — kattaroqda erkin harakatlanadi
+  const Tmin = 0.005   // minimal temperatura — oxirida deyarli greedy
   const coolRate = Math.pow(Tmin / T0, 1 / N)
   let T = T0
   // Eng yaxshi topilgan konfiguratsiya (SA tasodifiy katta sakrashlardan keyin yomonlashishi mumkin)
   let bestEntries = entries.map((e) => ({ ...e }))
-  let bestGaps = (() => { let g = 0; for (const t of teachers) for (let d = 0; d < days; d++) g += teacherDayGap(t.id, d); return g })()
+  let bestScore = (() => {
+    let s = 0
+    for (const t of teachers) for (let d = 0; d < days; d++) s += teacherDayGap(t.id, d)
+    const cids = new Set(entries.map((e) => e.classId))
+    for (const cid of cids) for (let d = 0; d < days; d++) s += classDayGap(cid, d)
+    for (const t of teachers) s += teacherLoadImbalance(t.id) * 0.3
+    return s
+  })()
+
+  /** Swap uchun: ikki entry'ni bir-birining joyiga qo'yish mumkinmi */
+  const canSwapEntries = (e1: TimetableEntry, e2: TimetableEntry): boolean => {
+    // Vaqtincha eski joylarini eslab, yangi joylarga tekshiramiz
+    const od1 = e1.day; const op1 = e1.slot
+    const od2 = e2.day; const op2 = e2.slot
+    // e1 -> e2 joyiga
+    e1.day = od2; e1.slot = op2
+    e2.day = od1; e2.slot = op1
+    // e1 yangi joyida free?
+    let ok = true
+    for (const o of entries) {
+      if (o.id === e1.id || o.id === e2.id) continue
+      if (o.day === od2 && o.slot === op2 && weekOverlap(o.week, e1.week)) {
+        if (o.classId === e1.classId) { ok = false; break }
+        if (e1.teacherId && (o.teacherId === e1.teacherId || o.teacher2Id === e1.teacherId)) { ok = false; break }
+        if (e1.teacher2Id && (o.teacherId === e1.teacher2Id || o.teacher2Id === e1.teacher2Id)) { ok = false; break }
+        if (e1.roomId && o.roomId === e1.roomId) { ok = false; break }
+      }
+    }
+    if (ok) {
+      for (const tid of [e1.teacherId, e1.teacher2Id]) if (tid && !teacherAllowed(tid, od2, op2)) { ok = false; break }
+      if (ok && !classAllowed(e1.classId, od2, op2)) ok = false
+    }
+    // e2 yangi joyida free?
+    if (ok) {
+      for (const o of entries) {
+        if (o.id === e1.id || o.id === e2.id) continue
+        if (o.day === od1 && o.slot === op1 && weekOverlap(o.week, e2.week)) {
+          if (o.classId === e2.classId) { ok = false; break }
+          if (e2.teacherId && (o.teacherId === e2.teacherId || o.teacher2Id === e2.teacherId)) { ok = false; break }
+          if (e2.teacher2Id && (o.teacherId === e2.teacher2Id || o.teacher2Id === e2.teacher2Id)) { ok = false; break }
+          if (e2.roomId && o.roomId === e2.roomId) { ok = false; break }
+        }
+      }
+      if (ok) {
+        for (const tid of [e2.teacherId, e2.teacher2Id]) if (tid && !teacherAllowed(tid, od1, op1)) { ok = false; break }
+        if (ok && !classAllowed(e2.classId, od1, op1)) ok = false
+      }
+    }
+    // Qaytarish
+    e1.day = od1; e1.slot = op1
+    e2.day = od2; e2.slot = op2
+    return ok
+  }
 
   for (let it = 0; it < N; it++) {
     if (it % 120 === 0) onProgress?.(5 + (it / N) * 92, `Yaxshilanmoqda... ${Math.round((it / N) * 100)}%`)
@@ -922,21 +1270,64 @@ export function improveTimetable(
     const op = e.slot
     const t1 = e.teacherId
     const t2 = e.teacher2Id
-    const affected = (d2: number) => {
-      const ds = od === d2 ? [od] : [od, d2]
-      let s = 0
-      for (const dd of ds) s += classDayGap(e.classId, dd) + teacherDayGap(t1, dd) + teacherDayGap(t2, dd)
-      return s
-    }
     const subjOfE = lessonById.get(e.lessonId)?.subjectId
 
-    // Birinchi N/3 iteratsiyada SA (tasodifiy) — qolganida greedy best-swap
-    if (it < N * 0.6) {
-      // SA: tasodifiy slotni tanlab, delta ni hisoblab, qabul qilish ehtimoli bilan
+    // Uch strategiya: oddiy ko'chirish, cross-day swap, yuk balanslash
+    const strategy = rng()
+
+    if (strategy < 0.2 && movable.length > 1) {
+      // === Cross-day swap: ikki darsni kunlar orasida almashish ===
+      const e2 = movable[Math.floor(rng() * movable.length)]
+      if (e2.id === e.id || e2.locked) { T *= coolRate; continue }
+      // Spread saqlash
+      const subj2 = lessonById.get(e2.lessonId)?.subjectId
+      if (subjOfE && e2.day !== od && subjectDaySpread(e.classId, e2.day, subjOfE) > 0) { T *= coolRate; continue }
+      if (subj2 && od !== e2.day && subjectDaySpread(e2.classId, od, subj2) > 0) { T *= coolRate; continue }
+
+      if (!canSwapEntries(e, e2)) { T *= coolRate; continue }
+
+      const before = entryCost(e) + entryCost(e2)
+      const od2 = e2.day; const op2 = e2.slot
+      e.day = od2; e.slot = op2
+      e2.day = od; e2.slot = op
+      const after = entryCost(e) + entryCost(e2)
+      const delta = after - before
+      const accept = delta < 0 || rng() < Math.exp(-delta / Math.max(T, 0.001))
+      if (!accept) { e.day = od; e.slot = op; e2.day = od2; e2.slot = op2 }
+
+    } else if (strategy < 0.35) {
+      // === Yuk balanslash: o'qituvchini eng kam yukli kunga ko'chirish ===
+      let minLoad = Infinity; let bestDayForBalance = od
+      for (let dd = 0; dd < days; dd++) {
+        if (dd === od) continue
+        const load = teacherDayLoadCount(t1, dd)
+        if (load < minLoad) { minLoad = load; bestDayForBalance = dd }
+      }
+      if (bestDayForBalance === od) { T *= coolRate; continue }
+      // Spread saqlash
+      if (subjOfE && subjectDaySpread(e.classId, bestDayForBalance, subjOfE) > 0) { T *= coolRate; continue }
+      // Shu kundan bo'sh slot topish
+      let bestP = 0; let bestCost = Infinity
+      for (let p2 = 1; p2 <= maxP; p2++) {
+        if (!free(e, bestDayForBalance, p2)) continue
+        e.day = bestDayForBalance; e.slot = p2
+        const c = entryCost(e)
+        e.day = od; e.slot = op
+        if (c < bestCost) { bestCost = c; bestP = p2 }
+      }
+      if (bestP === 0) { T *= coolRate; continue }
+      const before = entryCost(e)
+      e.day = bestDayForBalance; e.slot = bestP
+      const after = entryCost(e)
+      const delta = after - before
+      const accept = delta < 0 || rng() < Math.exp(-delta / Math.max(T, 0.001))
+      if (!accept) { e.day = od; e.slot = op }
+
+    } else if (it < N * 0.6) {
+      // === SA: tasodifiy slotga ko'chirish ===
       const d2 = Math.floor(rng() * days)
       const p2 = 1 + Math.floor(rng() * maxP)
       if (d2 === od && p2 === op) { T *= coolRate; continue }
-      // Spread saqlash: shu fan boshqa kuni allaqachon bo'lsa — bu swap'ni o'tkazamiz
       if (
         d2 !== od && subjOfE &&
         entries.some(
@@ -944,17 +1335,18 @@ export function improveTimetable(
         )
       ) { T *= coolRate; continue }
       if (!free(e, d2, p2)) { T *= coolRate; continue }
-      const before = affected(d2)
+      const before = entryCost(e)
       e.day = d2; e.slot = p2
-      const after = affected(d2)
+      const after = entryCost(e)
       const delta = after - before
-      // Qabul qilish: delta < 0 → albatta; delta >= 0 → ehtimol exp(-delta/T)
       const accept = delta < 0 || rng() < Math.exp(-delta / Math.max(T, 0.001))
       if (!accept) { e.day = od; e.slot = op }
+
     } else {
-      // Greedy phase — hamma mumkin bo'lgan slot'lardan eng yaxshisini topish
+      // === Greedy phase: eng yaxshi slotni topish ===
       let best: { d: number; p: number } | null = null
       let bestDelta = 0
+      const currentCost = entryCost(e)
       for (let d2 = 0; d2 < days; d2++) {
         if (
           d2 !== od && subjOfE &&
@@ -965,30 +1357,35 @@ export function improveTimetable(
         for (let p2 = 1; p2 <= maxP; p2++) {
           if (d2 === od && p2 === op) continue
           if (!free(e, d2, p2)) continue
-          const before = affected(d2)
           e.day = d2; e.slot = p2
-          const after = affected(d2)
+          const newCost = entryCost(e)
           e.day = od; e.slot = op
-          const delta = after - before
+          const delta = newCost - currentCost
           if (delta < bestDelta) { bestDelta = delta; best = { d: d2, p: p2 } }
         }
       }
       if (best) { e.day = best.d; e.slot = best.p }
     }
 
-    // Eng yaxshi topilgan konfiguratsiyani eslab qolamiz (SA tasodifiy yomonroq bo'lsa qaytaramiz)
+    // Eng yaxshi topilgan konfiguratsiyani eslab qolamiz
     if (it % 50 === 0) {
-      let g = 0
-      for (const t of teachers) for (let d = 0; d < days; d++) g += teacherDayGap(t.id, d)
-      if (g < bestGaps) { bestGaps = g; bestEntries = entries.map((x) => ({ ...x })) }
+      let s = 0
+      for (const t of teachers) for (let d = 0; d < days; d++) s += teacherDayGap(t.id, d)
+      const cids = new Set(entries.map((e) => e.classId))
+      for (const cid of cids) for (let d = 0; d < days; d++) s += classDayGap(cid, d)
+      for (const t of teachers) s += teacherLoadImbalance(t.id) * 0.3
+      if (s < bestScore) { bestScore = s; bestEntries = entries.map((x) => ({ ...x })) }
     }
     T *= coolRate
   }
 
   // SA oxirida eng yaxshi topilgan natijani tiklaymiz (agar hozirgi undan yomonroq bo'lsa)
-  let finalGaps = 0
-  for (const t of teachers) for (let d = 0; d < days; d++) finalGaps += teacherDayGap(t.id, d)
-  if (finalGaps > bestGaps) {
+  let finalScore = 0
+  for (const t of teachers) for (let d = 0; d < days; d++) finalScore += teacherDayGap(t.id, d)
+  const finalCids = new Set(entries.map((e) => e.classId))
+  for (const cid of finalCids) for (let d = 0; d < days; d++) finalScore += classDayGap(cid, d)
+  for (const t of teachers) finalScore += teacherLoadImbalance(t.id) * 0.3
+  if (finalScore > bestScore) {
     entries.length = 0
     for (const be of bestEntries) entries.push(be)
   }

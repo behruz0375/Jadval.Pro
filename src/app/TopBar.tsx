@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Menu, Minus, Square, X, LogOut, Search, Send, Save, Cloud, CloudOff } from 'lucide-react'
+import { Menu, Minus, Square, X, LogOut, Search, Send, Save, Cloud, CloudOff, AlertTriangle, Clock } from 'lucide-react'
 import { useUI } from '@/store/ui'
 import { useAuth } from '@/store/auth'
 import { useProject } from '@/store/project'
@@ -15,9 +15,12 @@ import {
 } from '@/features/cloud/api'
 import { useTier } from '@/features/pro/tier'
 import { ProBadge } from '@/features/pro/ProBadge'
+import { useExpiry } from '@/features/pro/useExpiry'
 
 export function TopBar() {
   const toggleSidebar = useUI((s) => s.toggleSidebar)
+  const mobileSidebarOpen = useUI((s) => s.mobileSidebarOpen)
+  const setMobileSidebarOpen = useUI((s) => s.setMobileSidebarOpen)
   const setSearchOpen = useUI((s) => s.setSearchOpen)
   const role = useAuth((s) => s.role)
   const logout = useAuth((s) => s.logout)
@@ -91,6 +94,8 @@ export function TopBar() {
     window.open(url, '_blank')
   }
 
+  const expiry = useExpiry()
+
   const label =
     role === 'owner'
       ? '👑 Admin (Boshqaruv)'
@@ -103,21 +108,57 @@ export function TopBar() {
             : "👩‍🎓 O'quvchi"
 
   return (
-    <header className="no-print flex h-11 shrink-0 items-center gap-1 border-b border-border bg-surface px-2 select-none">
-      <button onClick={toggleSidebar} className="btn btn-ghost h-9 px-2.5" title="Bosh menyu (yon panel)">
+    <>
+    {/* Muddat tugagan — faqat ko'rish rejimi banneri */}
+    {expiry.isExpired && (
+      <div className="no-print flex h-9 shrink-0 items-center justify-center gap-2 bg-danger text-white text-sm font-semibold select-none">
+        <AlertTriangle size={16} />
+        <span>{t("Muddat tugagan — faqat ko'rish rejimi")}</span>
+      </div>
+    )}
+    {/* Muddat yaqinlashmoqda — hisob-kitob banneri */}
+    {!expiry.isExpired && expiry.isWarning && (
+      <div className={cx(
+        'no-print flex h-9 shrink-0 items-center justify-center gap-2 text-sm font-semibold select-none',
+        expiry.daysLeft <= 1
+          ? 'bg-danger/90 text-white'
+          : 'bg-amber-500/90 text-white',
+      )}>
+        <Clock size={16} />
+        <span>{t('Muddat yakunlanmoqda')}: {expiry.countdownText}</span>
+      </div>
+    )}
+    <header className="no-print flex h-11 shrink-0 items-center gap-1 border-b border-border bg-surface px-1.5 select-none sm:px-2">
+      {/* Hamburger: mobilda sidebar overlay ochadi, desktopda collapse qiladi */}
+      <button
+        onClick={() => {
+          toggleSidebar()
+          setMobileSidebarOpen(!mobileSidebarOpen)
+        }}
+        className="btn btn-ghost h-9 px-2"
+        title="Bosh menyu (yon panel)"
+      >
         <Menu size={18} />
         <span className="hidden text-sm font-semibold sm:inline">{t('Bosh menyu')}</span>
       </button>
 
-      <div className="mx-2 h-5 w-px bg-border" />
+      <div className="mx-1 hidden h-5 w-px bg-border sm:mx-2 sm:block" />
 
-      <div className="flex items-center gap-2">
-        <div className="grid h-6 w-6 place-items-center rounded-md bg-accent text-accent-fg text-xs font-black">J</div>
-        <span className="text-sm font-semibold">
-          JadvalPro <span className="text-muted">— Dars jadvali</span>
+      <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+        <div className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-accent text-accent-fg text-xs font-black">J</div>
+        <span className="truncate text-sm font-semibold">
+          JadvalPro <span className="hidden text-muted sm:inline">— Dars jadvali</span>
         </span>
       </div>
 
+      {/* Qidirish — mobilda faqat ikonka, desktopda to'liq */}
+      <button
+        onClick={() => setSearchOpen(true)}
+        className="btn btn-ghost ml-1 h-8 w-8 shrink-0 p-0 text-muted sm:ml-4 sm:hidden"
+        title="Qidirish"
+      >
+        <Search size={16} />
+      </button>
       <button
         onClick={() => setSearchOpen(true)}
         className="ml-4 hidden h-8 items-center gap-2 rounded-lg border border-border bg-surface-2 px-2.5 text-muted transition-colors hover:border-accent/40 hover:text-ink sm:flex"
@@ -128,7 +169,7 @@ export function TopBar() {
         <kbd className="hidden rounded border border-border bg-surface px-1 text-[10px] lg:inline">Ctrl F</kbd>
       </button>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex items-center gap-1 sm:gap-2">
         {role !== 'teacher' && role !== 'student' && role !== 'owner' && savedLabel && (
           <span
             className={cx(
@@ -194,6 +235,7 @@ export function TopBar() {
         </div>
       </div>
     </header>
+    </>
   )
 }
 

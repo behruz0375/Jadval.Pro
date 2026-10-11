@@ -370,6 +370,95 @@ const DICT: Record<Exclude<Lang, 'uz'>, Record<string, string>> = {
     'Yillik yangilanish': 'Годовое обновление',
     "To'lov qilgandan so'ng faollashtirish kaliti olasiz":
       'После оплаты вы получаете ключ активации',
+    // --- Landing sahifasi ---
+    'Maktablar uchun aqlli jadval tuzuvchi': 'Умный составитель расписания для школ',
+    'Dars jadvalini': 'Составьте расписание за',
+    'soniyalarda': 'секунды',
+    'tuzing': '',
+    "JadvalPro — o'qituvchi, sinf va xonalar bo'yicha to'qnashuvsiz, SanPiN talablariga mos jadvalni avtomatik tuzadi. Qo'lda kunlar ketadigan ishni bir necha daqiqaga qisqartiradi.":
+      'JadvalPro автоматически составляет расписание без конфликтов по учителям, классам и кабинетам, соответствующее требованиям СанПиН. Работу, которая вручную занимает дни, сокращает до нескольких минут.',
+    'Imkoniyatlar': 'Возможности',
+    'Avtomatik jadval': 'Автоматическое расписание',
+    "Yuzlab darsni bir necha soniyada konfliktsiz joylashtiradi — o'qituvchi, sinf va xona to'qnashuvisiz.":
+      'Размещает сотни уроков за несколько секунд без конфликтов — без наложений учителей, классов и кабинетов.',
+    'Kuchli himoya': 'Надёжная защита',
+    "Qurilmaga bog'langan litsenziya. Nusxa ko'chirib boshqa kompyuterda ishlatib bo'lmaydi.":
+      'Лицензия привязана к устройству. Скопировать и использовать на другом компьютере невозможно.',
+    "3 pog'onali rol": '3 уровня ролей',
+    "Egasi, Direktor va O'rinbosar (O'TIBDO') uchun alohida panel va huquqlar.":
+      'Отдельные панели и права для Владельца, Директора и Завуча.',
+    '8 mavzu + sozlamalar': '8 тем + настройки',
+    "Qorong'i rejim, zoom, zichlik, gradient, ranglar — har kim o'ziga moslaydi.":
+      'Тёмный режим, масштаб, плотность, градиент, цвета — каждый настраивает под себя.',
+    'Excel & PDF eksport': 'Экспорт в Excel и PDF',
+    "Sinf va o'qituvchi jadvallarini chop etishga tayyor formatda chiqaring.":
+      'Экспортируйте расписание классов и учителей в готовом для печати формате.',
+    'Internetsiz ishlaydi': 'Работает без интернета',
+    "Barcha ma'lumot qurilmada. Offline, tez va maxfiy.":
+      'Все данные на устройстве. Офлайн, быстро и конфиденциально.',
+    'Jadval tuziladi': 'Расписание готово',
+    'Konflikt kafolati': 'Без конфликтов',
+    'Chiroyli mavzu': 'Красивых тем',
+    'Namuna jadval — 5-A sinf': 'Пример расписания — 5-А класс',
+    'Nega aynan JadvalPro?': 'Почему именно JadvalPro?',
+    'Zamonaviy, tez va xavfsiz — maktab ehtiyojlariga moslangan.':
+      'Современный, быстрый и безопасный — адаптирован под нужды школы.',
+    'Bugun jadvalingizni tuzing': 'Составьте расписание сегодня',
+    'Konfliktsiz avtomatik jadval': 'Автоматическое расписание без конфликтов',
+    "Qurilmaga bog'langan xavfsiz litsenziya": 'Безопасная лицензия, привязанная к устройству',
+    'Excel va PDF eksport': 'Экспорт в Excel и PDF',
+    'Internetsiz, tez va maxfiy': 'Без интернета, быстро и конфиденциально',
+    'Dasturga kirish': 'Войти в программу',
+    'Sotib olish': 'Купить',
+    "Narx va to'lov tartibini admin Telegramda yuboradi":
+      'Цены и порядок оплаты администратор отправит в Telegram',
+    'Dars jadvali tuzuvchi': 'Составитель расписания',
+    'Egasi kirishi': 'Вход владельца',
+    'Egasi (dastur sotuvchisi) kirishi': 'Вход владельца (продавца)',
+    "Dasturni o'rganish": 'Изучение программы',
+    "Dasturni sotib olish — Telegramda admin bilan bog'lanish":
+      'Купить программу — связаться с админом в Telegram',
+    'Du': 'Пн',
+    'Se': 'Вт',
+    'Ch': 'Ср',
+    'Pa': 'Чт',
+    'Ju': 'Пт',
+    'Assalomu alaykum! JadvalPro dasturini sotib olmoqchiman.':
+      'Здравствуйте! Хочу купить программу JadvalPro.',
+    'Maxsus kod': 'Код устройства',
+    // --- Rol tanlash ---
+    'Kim sifatida': 'Кем вы',
+    'kirasiz?': 'входите?',
+    "Har bir rol o'z logini va paroli bilan kiradi":
+      'Каждая роль входит со своим логином и паролем',
+    'Zavuch': 'Завуч',
+    "Ma'lumot kiritish, dars jadvalini tuzish, o'qituvchi va sinf hisoblarini boshqarish.":
+      'Ввод данных, составление расписания, управление аккаунтами учителей и классов.',
+    "O'z dars jadvalini ko'rish — qaysi kun, qaysi sinfda, qaysi xonada.":
+      'Просмотр своего расписания — какой день, в каком классе, в каком кабинете.',
+    "O'quvchi": 'Ученик',
+    "O'z sinfining haftalik dars jadvalini ko'rish.":
+      'Просмотр недельного расписания своего класса.',
+    'Dasturni sotib olishni istaysizmi?': 'Хотите купить программу?',
+    'Adminga Telegramda yozing': 'Напишите админу в Telegram',
+    'Admin panel': 'Панель админа',
+    // --- Sinf rahbari ---
+    'Sinf rahbari': 'Классный руководитель',
+    'Sinf rahbari (ixtiyoriy)': 'Классный руководитель (необяз.)',
+    '— tanlanmagan —': '— не выбрано —',
+    // --- Tutorial yo'riqnomasi ---
+    "Har bir bo'lim haqida batafsil": 'Подробно о каждом разделе',
+    'Oldingi': 'Предыдущий',
+    'Keyingi': 'Далее',
+    'Tayyor': 'Готово',
+    'Qadamlar': 'Шаги',
+    // --- Muddat (expiry) ---
+    "Muddat tugagan — faqat ko'rish rejimi": 'Срок истёк — режим просмотра',
+    'Muddat yakunlanmoqda': 'Срок истекает',
+    'Bulutga oxirgi yuborish': 'Последняя отправка в облако',
+    'Hozir yuborish uchun bosing': 'Нажмите для отправки',
+    'Bulutga yuborildi': 'Отправлено в облако',
+    'hali yuborilmagan': 'ещё не отправлено',
   },
   en: {
     'Boshqaruv paneli': 'Control panel',
@@ -700,6 +789,95 @@ const DICT: Record<Exclude<Lang, 'uz'>, Record<string, string>> = {
     'Yillik yangilanish': 'Yearly updates',
     "To'lov qilgandan so'ng faollashtirish kaliti olasiz":
       'After payment you receive an activation key',
+    // --- Landing page ---
+    'Maktablar uchun aqlli jadval tuzuvchi': 'Smart timetable builder for schools',
+    'Dars jadvalini': 'Build your timetable in',
+    'soniyalarda': 'seconds',
+    'tuzing': '',
+    "JadvalPro — o'qituvchi, sinf va xonalar bo'yicha to'qnashuvsiz, SanPiN talablariga mos jadvalni avtomatik tuzadi. Qo'lda kunlar ketadigan ishni bir necha daqiqaga qisqartiradi.":
+      'JadvalPro automatically creates conflict-free timetables for teachers, classes and rooms, compliant with standards. Reduces days of manual work to just minutes.',
+    'Imkoniyatlar': 'Features',
+    'Avtomatik jadval': 'Automatic timetable',
+    "Yuzlab darsni bir necha soniyada konfliktsiz joylashtiradi — o'qituvchi, sinf va xona to'qnashuvisiz.":
+      'Places hundreds of lessons in seconds without conflicts — no teacher, class or room clashes.',
+    'Kuchli himoya': 'Strong protection',
+    "Qurilmaga bog'langan litsenziya. Nusxa ko'chirib boshqa kompyuterda ishlatib bo'lmaydi.":
+      'Device-locked license. Cannot be copied and used on another computer.',
+    "3 pog'onali rol": '3-tier roles',
+    "Egasi, Direktor va O'rinbosar (O'TIBDO') uchun alohida panel va huquqlar.":
+      'Separate panels and permissions for Owner, Director and Vice Principal.',
+    '8 mavzu + sozlamalar': '8 themes + settings',
+    "Qorong'i rejim, zoom, zichlik, gradient, ranglar — har kim o'ziga moslaydi.":
+      'Dark mode, zoom, density, gradient, colors — everyone customizes to their liking.',
+    'Excel & PDF eksport': 'Excel & PDF export',
+    "Sinf va o'qituvchi jadvallarini chop etishga tayyor formatda chiqaring.":
+      'Export class and teacher timetables in print-ready format.',
+    'Internetsiz ishlaydi': 'Works offline',
+    "Barcha ma'lumot qurilmada. Offline, tez va maxfiy.":
+      'All data stays on your device. Offline, fast and private.',
+    'Jadval tuziladi': 'Timetable ready',
+    'Konflikt kafolati': 'Conflict-free',
+    'Chiroyli mavzu': 'Beautiful themes',
+    'Namuna jadval — 5-A sinf': 'Sample timetable — Class 5-A',
+    'Nega aynan JadvalPro?': 'Why JadvalPro?',
+    'Zamonaviy, tez va xavfsiz — maktab ehtiyojlariga moslangan.':
+      'Modern, fast and secure — tailored for school needs.',
+    'Bugun jadvalingizni tuzing': 'Build your timetable today',
+    'Konfliktsiz avtomatik jadval': 'Conflict-free automatic timetable',
+    "Qurilmaga bog'langan xavfsiz litsenziya": 'Secure device-locked license',
+    'Excel va PDF eksport': 'Excel and PDF export',
+    'Internetsiz, tez va maxfiy': 'Offline, fast and private',
+    'Dasturga kirish': 'Enter the app',
+    'Sotib olish': 'Buy',
+    "Narx va to'lov tartibini admin Telegramda yuboradi":
+      'Admin will send pricing and payment details via Telegram',
+    'Dars jadvali tuzuvchi': 'Timetable builder',
+    'Egasi kirishi': 'Owner login',
+    'Egasi (dastur sotuvchisi) kirishi': 'Owner (seller) login',
+    "Dasturni o'rganish": 'Learn the app',
+    "Dasturni sotib olish — Telegramda admin bilan bog'lanish":
+      'Buy the program — contact admin on Telegram',
+    'Du': 'Mon',
+    'Se': 'Tue',
+    'Ch': 'Wed',
+    'Pa': 'Thu',
+    'Ju': 'Fri',
+    'Assalomu alaykum! JadvalPro dasturini sotib olmoqchiman.':
+      'Hello! I would like to buy JadvalPro.',
+    'Maxsus kod': 'Device code',
+    // --- Role selection ---
+    'Kim sifatida': 'Who are you',
+    'kirasiz?': 'logging in as?',
+    "Har bir rol o'z logini va paroli bilan kiradi":
+      'Each role logs in with its own username and password',
+    'Zavuch': 'Vice Principal',
+    "Ma'lumot kiritish, dars jadvalini tuzish, o'qituvchi va sinf hisoblarini boshqarish.":
+      'Data entry, timetable building, managing teacher and class accounts.',
+    "O'z dars jadvalini ko'rish — qaysi kun, qaysi sinfda, qaysi xonada.":
+      'View your timetable — which day, which class, which room.',
+    "O'quvchi": 'Student',
+    "O'z sinfining haftalik dars jadvalini ko'rish.":
+      "View your class's weekly timetable.",
+    'Dasturni sotib olishni istaysizmi?': 'Want to buy the program?',
+    'Adminga Telegramda yozing': 'Message admin on Telegram',
+    'Admin panel': 'Admin panel',
+    // --- Class teacher ---
+    'Sinf rahbari': 'Class teacher',
+    'Sinf rahbari (ixtiyoriy)': 'Class teacher (optional)',
+    '— tanlanmagan —': '— not selected —',
+    // --- Tutorial guide ---
+    "Har bir bo'lim haqida batafsil": 'Detailed info about each section',
+    'Oldingi': 'Previous',
+    'Keyingi': 'Next',
+    'Tayyor': 'Done',
+    'Qadamlar': 'Steps',
+    // --- Expiry ---
+    "Muddat tugagan — faqat ko'rish rejimi": 'Expired — view-only mode',
+    'Muddat yakunlanmoqda': 'Expiring soon',
+    'Bulutga oxirgi yuborish': 'Last cloud upload',
+    'Hozir yuborish uchun bosing': 'Click to upload now',
+    'Bulutga yuborildi': 'Uploaded to cloud',
+    'hali yuborilmagan': 'not yet uploaded',
   },
 }
 

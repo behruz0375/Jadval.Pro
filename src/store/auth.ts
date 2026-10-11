@@ -658,7 +658,7 @@ export const useAuth = create<AuthState>()(
       roleLabel: () => {
         const r = get().role
         return r === 'owner'
-          ? 'Egasi (Admin)'
+          ? 'Admin'
           : r === 'director'
             ? 'Zavuch'
             : r === 'deputy'

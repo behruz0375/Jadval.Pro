@@ -8,6 +8,7 @@ import { generateLessonTimes, fillShiftTimes } from '@/data/factories'
 import { useT } from '@/i18n'
 import { cx, uid } from '@/utils'
 import type { Shift, Building, AvailabilityMatrix } from '@/types'
+import { useExpiry } from '@/features/pro/useExpiry'
 
 // shift.grid[lesson][day] → AvailabilityGrid uchun [day][lesson]
 function transposeShiftGrid(grid: boolean[][], workDays: number): AvailabilityMatrix {
@@ -32,6 +33,7 @@ export function SchoolPage() {
   const setMaxLessonsPerDay = useProject((s) => s.setMaxLessonsPerDay)
   const toast = useToast()
   const t = useT()
+  const { isReadOnly } = useExpiry()
   const [tab, setTab] = useState(0)
   const shiftStartRef = useRef<HTMLInputElement>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
@@ -154,7 +156,7 @@ export function SchoolPage() {
   }
 
   return (
-    <div className="fade-in flex h-full flex-col gap-4 overflow-y-auto p-4">
+    <div className="fade-in flex flex-col gap-4 p-4 pb-8">
       <div className="flex items-center gap-2">
         <div className="grid h-9 w-9 place-items-center rounded-lg bg-accent/15 text-accent">
           <SchoolIcon size={20} />
@@ -162,7 +164,7 @@ export function SchoolPage() {
         <h1 className="text-lg font-bold">Maktab ma'lumotlari</h1>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className={cx('grid gap-4 xl:grid-cols-2', isReadOnly && 'pointer-events-none opacity-60')}>
         {/* Muassasa haqida */}
         <section className="card p-5">
           <h2 className="mb-3 font-semibold">Muassasa haqida</h2>

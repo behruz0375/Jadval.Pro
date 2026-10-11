@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   ShieldCheck,
   Copy,
@@ -18,19 +18,43 @@ import {
   EyeOff,
   Pencil,
   KeyRound,
+  LogIn,
+  Download,
+  Upload,
+  FileText,
+  Clock,
+  AlertTriangle,
+  MessageSquare,
+  Wrench,
+  Package,
+  Star,
+  TrendingUp,
+  Zap,
 } from 'lucide-react'
 import { useAuth } from '@/store/auth'
 import { useToast } from '@/store/toast'
+import { useProject } from '@/store/project'
 import { Field, TextField, SelectField } from '@/components/Field'
 import { Modal } from '@/components/Modal'
-import { cx } from '@/utils'
+import { cx, uid } from '@/utils'
 import { generateProKey } from '@/features/pro/tier'
 import { ProBadge } from '@/features/pro/ProBadge'
+import { validateProject } from '@/engine/validate'
+import type { Project } from '@/types'
+import type { ValidationResult } from '@/engine/validate'
+
+interface TemplateRecord {
+  id: string
+  name: string
+  savedAt: string
+  project: Project
+}
 
 export function OwnerPanel() {
   const schools = useAuth((s) => s.schools)
   const addCustomer = useAuth((s) => s.addCustomer)
   const provisionDirectorHere = useAuth((s) => s.provisionDirectorHere)
+  const staffLogin = useAuth((s) => s.staffLogin)
   const updateCustomer = useAuth((s) => s.updateCustomer)
   const setSchoolBlocked = useAuth((s) => s.setSchoolBlocked)
   const removeSchool = useAuth((s) => s.removeSchool)
@@ -48,6 +72,7 @@ export function OwnerPanel() {
   const [notes, setNotes] = useState('')
   const [plan, setPlan] = useState<'Free' | 'Pro'>('Free')
   const [proKey, setProKey] = useState('')
+  const [expiresAt, setExpiresAt] = useState('')
   const [query, setQuery] = useState('')
   const [delId, setDelId] = useState<string | null>(null)
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
@@ -69,11 +94,17 @@ export function OwnerPanel() {
     if (password.length < 4) return toast.error("Parol kamida 4 belgi bo'lsin")
     // Pro tanlangan va kalit yo'q bo'lsa — avto-generatsiya
     const key = plan === 'Pro' ? (proKey.trim() || generateProKey()) : ''
+    const expiry = plan === 'Pro' && expiresAt ? new Date(expiresAt).toISOString() : undefined
     if (editId) {
-      updateCustomer(editId, { schoolName, director, phone, login, password, notes, plan, key })
+      updateCustomer(editId, { schoolName, director, phone, login, password, notes, plan, key, ...(expiry ? { expiresAt: expiry } : {}) })
       toast.success('Mijoz yangilandi')
     } else {
       addCustomer({ schoolName, director, phone, login, password, notes, plan, key })
+      // Pro muddatini belgilash (yangi mijoz)
+      if (expiry) {
+        const latest = useAuth.getState().schools
+        if (latest[0]) updateCustomer(latest[0].licenseId, { expiresAt: expiry })
+      }
       toast.success(plan === 'Pro' ? `Yangi Pro mijoz saqlandi. Kalit: ${key}` : 'Yangi mijoz saqlandi')
     }
     // MUHIM: shu qurilmada direktor hisobini ham sozlab beramiz —
@@ -99,6 +130,7 @@ export function OwnerPanel() {
     const planNorm = (s.plan === 'Pro' || s.plan === 'Premium') ? 'Pro' : 'Free'
     setPlan(planNorm)
     setProKey(s.key ?? '')
+    setExpiresAt(s.expiresAt ? s.expiresAt.slice(0, 10) : '')
     setOpen(true)
   }
 
@@ -112,6 +144,7 @@ export function OwnerPanel() {
     setNotes('')
     setPlan('Free')
     setProKey('')
+    setExpiresAt('')
   }
 
   const toggleReveal = (id: string) => {
@@ -141,14 +174,18 @@ export function OwnerPanel() {
     `${s.schoolName} ${s.director} ${s.phone} ${s.login} ${s.notes ?? ''}`.toLowerCase().includes(query.toLowerCase()),
   )
 
+  const proCust = schools.filter((s) => s.plan === 'Pro' || s.plan === 'Premium').length
+  const thisWeekNew = schools.filter((s) => Date.now() - new Date(s.issuedAt).getTime() < 7 * 86400000).length
   const STATS = [
     { label: 'Jami mijozlar', value: schools.length, color: '#3b82f6', icon: Building2 },
     { label: 'Faol', value: active.length, color: '#22c55e', icon: CircleCheck },
     { label: 'Bloklangan', value: blocked.length, color: '#ef4444', icon: Ban },
+    { label: 'Pro tarif', value: proCust, color: '#f59e0b', icon: Star },
+    { label: 'Bu hafta yangi', value: thisWeekNew, color: '#8b5cf6', icon: TrendingUp },
   ]
 
   return (
-    <div className="fade-in flex h-full flex-col gap-5 overflow-y-auto p-5">
+    <div className="fade-in flex flex-col gap-5 p-4 pb-8 sm:p-5">
       <div className="flex flex-wrap items-center gap-3">
         <div className="grid h-10 w-10 place-items-center rounded-xl bg-accent text-accent-fg shadow-soft">
           <ShieldCheck size={22} />
@@ -163,7 +200,7 @@ export function OwnerPanel() {
       </div>
 
       {/* Rangli statistikalar */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {STATS.map((s) => {
           const Icon = s.icon
           return (
@@ -225,7 +262,18 @@ export function OwnerPanel() {
       {/* Egasi hisobi xavfsizligi */}
       <OwnerAccountCard />
       <OwnerRecoveryCard />
+
+      {/* Pro kalit va eksport vositalari */}
+      <BatchProKeyCard />
+      <CustomerExportCard />
+      <TelegramBatchCard />
+
       <AuditLogCard />
+
+      {/* Shablonlar va diagnostika */}
+      <TemplatesCard />
+      <ProjectImportCard />
+      <RemoteHelpCard />
 
       {/* Mijozlar ro'yxati */}
       <div className="flex items-center gap-2">
@@ -266,9 +314,17 @@ export function OwnerPanel() {
                       {s.director && <div className="text-xs text-muted">{s.director}</div>}
                     </div>
                   </div>
-                  <span className={cx('chip shrink-0', s.blocked ? 'bg-danger/15 text-danger' : 'bg-ok/15 text-ok')}>
-                    {s.blocked ? 'Bloklangan' : 'Faol'}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={cx('chip shrink-0', s.blocked ? 'bg-danger/15 text-danger' : 'bg-ok/15 text-ok')}>
+                      {s.blocked ? 'Bloklangan' : 'Faol'}
+                    </span>
+                    {(s.plan === 'Pro' || s.plan === 'Premium') && s.expiresAt && (() => {
+                      const daysLeft = Math.ceil((new Date(s.expiresAt).getTime() - Date.now()) / 86400000)
+                      if (daysLeft < 0) return <span className="chip shrink-0 bg-danger/15 text-danger"><Clock size={10} /> Muddati tugagan</span>
+                      if (daysLeft <= 7) return <span className="chip shrink-0 bg-warn/15 text-warn"><Clock size={10} /> {daysLeft} kun qoldi</span>
+                      return null
+                    })()}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
@@ -336,15 +392,20 @@ export function OwnerPanel() {
                       }
                       const err = await provisionDirectorHere(s.login, s.password)
                       if (err) {
-                        toast.error(err)
+                        toast.error('Hisobni sozlashda xato: ' + err)
                         return
                       }
-                      toast.success('Zavuch hisobi shu qurilmada sozlandi — endi "Chiqish" bosib shu login/parol bilan Zavuch sifatida kirishingiz mumkin')
+                      const loginErr = await staffLogin('director', s.login, s.password)
+                      if (loginErr) {
+                        toast.error('Zavuch loginida xato: ' + loginErr)
+                        return
+                      }
+                      toast.success(`Zavuch sifatida kirdingiz — ${s.schoolName}`)
                     }}
-                    className="btn btn-outline hover-lift h-8 px-2 text-xs"
-                    title="Shu login/parol bilan Zavuch panelida testlab ko'rish uchun direktor hisobini shu qurilmada sozlash"
+                    className="btn hover-lift h-8 flex-1 bg-emerald-600 px-2 text-xs text-white hover:bg-emerald-700"
+                    title="Shu login/parol bilan Zavuch panelida testlab ko'rish"
                   >
-                    <UserCog size={13} />
+                    <LogIn size={13} /> Sinab ko'rish
                   </button>
                   <button
                     onClick={() => openForEdit(s.licenseId)}
@@ -414,24 +475,33 @@ export function OwnerPanel() {
             </SelectField>
           </Field>
           {plan === 'Pro' ? (
-            <Field label="Pro aktivatsiya kaliti" hint="Mijoz Sozlamalar'da shuni kiritadi">
-              <div className="flex gap-2">
+            <>
+              <Field label="Pro aktivatsiya kaliti" hint="Mijoz Sozlamalar'da shuni kiritadi">
+                <div className="flex gap-2">
+                  <TextField
+                    value={proKey}
+                    onChange={(e) => setProKey(e.target.value.toUpperCase())}
+                    placeholder="JPRO-XXXX-XXXX-XXXX"
+                    className="font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setProKey(generateProKey())}
+                    className="btn btn-outline"
+                    title="Yangi kalit"
+                  >
+                    🎲
+                  </button>
+                </div>
+              </Field>
+              <Field label="Pro muddati (tugash sanasi)" hint="Muddati o'tsa avtomatik Free ga tushadi">
                 <TextField
-                  value={proKey}
-                  onChange={(e) => setProKey(e.target.value.toUpperCase())}
-                  placeholder="JPRO-XXXX-XXXX-XXXX"
-                  className="font-mono"
+                  type="date"
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
                 />
-                <button
-                  type="button"
-                  onClick={() => setProKey(generateProKey())}
-                  className="btn btn-outline"
-                  title="Yangi kalit"
-                >
-                  🎲
-                </button>
-              </div>
-            </Field>
+              </Field>
+            </>
           ) : (
             <div className="hidden sm:block" />
           )}
@@ -619,13 +689,52 @@ function Info({ label, value }: { label: string; value: string }) {
   )
 }
 
-/** Faollik jurnali (audit log) — qurilmadagi oxirgi 200 ta hodisa */
+/** Faollik jurnali (audit log) — qurilmadagi oxirgi 200 ta hodisa — kengaytirilgan versiya */
 function AuditLogCard() {
   const audit = useAuth((s) => s.audit)
   const clearAudit = useAuth((s) => s.clearAudit)
   const [expanded, setExpanded] = useState(false)
+  const [searchQ, setSearchQ] = useState('')
+  const [dateRange, setDateRange] = useState<'all' | 'today' | 'week' | 'month'>('all')
   const toast = useToast()
-  const shown = expanded ? audit : audit.slice(0, 10)
+
+  const filtered = audit.filter((e) => {
+    if (searchQ && !`${e.action} ${e.detail ?? ''}`.toLowerCase().includes(searchQ.toLowerCase())) return false
+    if (dateRange !== 'all') {
+      const t = new Date(e.at).getTime()
+      const now = Date.now()
+      if (dateRange === 'today' && now - t > 86400000) return false
+      if (dateRange === 'week' && now - t > 7 * 86400000) return false
+      if (dateRange === 'month' && now - t > 30 * 86400000) return false
+    }
+    return true
+  })
+  const shown = expanded ? filtered : filtered.slice(0, 10)
+
+  const actionColor = (action: string) => {
+    if (action.includes('kirdi') || action.includes('Kirish')) return 'bg-ok/15 text-ok'
+    if (action.includes('bloklandi') || action.includes('Bloklash')) return 'bg-danger/15 text-danger'
+    if (action.includes('yaratildi') || action.includes('add')) return 'bg-accent/15 text-accent'
+    if (action.includes('tiklandi') || action.includes('recover')) return 'bg-warn/15 text-warn'
+    if (action.includes("o'chirildi") || action.includes('delete')) return 'bg-danger/15 text-danger'
+    return 'bg-surface-2 text-muted'
+  }
+
+  const exportAuditCSV = () => {
+    const header = 'Sana,Amal,Tafsilot'
+    const rows = filtered.map((e) =>
+      `"${new Date(e.at).toLocaleString('uz')}","${e.action}","${(e.detail ?? '').replace(/"/g, '""')}"`,
+    )
+    const csv = '﻿' + header + '\n' + rows.join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'jadvalpro-audit.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('Audit CSV yuklandi')
+  }
 
   return (
     <div className="card p-5">
@@ -633,39 +742,576 @@ function AuditLogCard() {
         <h2 className="flex items-center gap-2 font-semibold">
           <History size={18} className="text-accent" /> Faollik jurnali
         </h2>
-        <span className="chip">{audit.length}</span>
-        <button
-          onClick={() => {
-            if (confirm('Butun faollik jurnalini tozalaysizmi?')) {
-              clearAudit()
-              toast.success('Jurnal tozalandi')
-            }
-          }}
-          disabled={audit.length === 0}
-          className="btn btn-outline ml-auto h-8 text-xs disabled:opacity-40"
-        >
-          <Eraser size={13} /> Tozalash
-        </button>
+        <span className="chip">{filtered.length}/{audit.length}</span>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted" />
+            <input
+              value={searchQ}
+              onChange={(e) => setSearchQ(e.target.value)}
+              placeholder="Qidirish..."
+              className="input h-8 w-40 pl-7 text-xs"
+            />
+          </div>
+          <select
+            value={dateRange}
+            onChange={(e) => setDateRange(e.target.value as typeof dateRange)}
+            className="input h-8 text-xs"
+          >
+            <option value="all">Barchasi</option>
+            <option value="today">Bugun</option>
+            <option value="week">Bu hafta</option>
+            <option value="month">Bu oy</option>
+          </select>
+          <button
+            onClick={exportAuditCSV}
+            disabled={filtered.length === 0}
+            className="btn btn-outline h-8 text-xs disabled:opacity-40"
+          >
+            <Download size={13} /> CSV
+          </button>
+          <button
+            onClick={() => {
+              if (confirm('Butun faollik jurnalini tozalaysizmi?')) {
+                clearAudit()
+                toast.success('Jurnal tozalandi')
+              }
+            }}
+            disabled={audit.length === 0}
+            className="btn btn-outline h-8 text-xs disabled:opacity-40"
+          >
+            <Eraser size={13} /> Tozalash
+          </button>
+        </div>
       </div>
       <p className="mb-3 text-sm text-muted">
         Oxirgi 200 ta hodisa shu qurilmada saqlanadi: kirishlar, hisob yaratish/bloklash, litsenziya faollashtirish, parol tiklash.
       </p>
-      {audit.length === 0 ? (
-        <p className="text-sm text-muted">Jurnal bo'sh.</p>
+      {filtered.length === 0 ? (
+        <p className="text-sm text-muted">
+          {audit.length === 0 ? "Jurnal bo'sh." : 'Filtrga mos hodisa topilmadi.'}
+        </p>
       ) : (
         <div className="flex flex-col gap-1 text-sm">
           {shown.map((e) => (
             <div key={e.id} className="flex items-baseline gap-2 rounded-md bg-surface-2/60 px-2.5 py-1.5">
               <span className="shrink-0 text-xs text-muted">{new Date(e.at).toLocaleString('uz')}</span>
-              <span className="font-medium">{e.action}</span>
+              <span className={cx('chip text-[10px]', actionColor(e.action))}>{e.action}</span>
               {e.detail && <span className="text-xs text-muted">— {e.detail}</span>}
             </div>
           ))}
-          {audit.length > 10 && (
+          {filtered.length > 10 && (
             <button onClick={() => setExpanded((v) => !v)} className="mt-1 self-start text-xs text-accent hover:underline">
-              {expanded ? "Qisqartirish" : `Yana ${audit.length - 10} ta ko'rsatish`}
+              {expanded ? 'Qisqartirish' : `Yana ${filtered.length - 10} ta ko'rsatish`}
             </button>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ====================================================================
+// Yangi kartalar (Feature 2-6, 9)
+// ====================================================================
+
+/** Feature 2: Batch Pro kalit generatsiya */
+function BatchProKeyCard() {
+  const toast = useToast()
+  const [open, setOpen] = useState(false)
+  const [qty, setQty] = useState(10)
+  const [keys, setKeys] = useState<string[]>([])
+
+  const generate = () => {
+    const k = Array.from({ length: Math.min(50, Math.max(1, qty)) }, () => generateProKey())
+    setKeys(k)
+  }
+
+  const copyAll = () => {
+    navigator.clipboard.writeText(keys.join('\n')).then(() => toast.success('Barcha kalitlar nusxalandi'))
+  }
+
+  const exportCSV = () => {
+    const csv = '﻿' + 'Kalit\n' + keys.join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'pro-keys.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('CSV yuklandi')
+  }
+
+  return (
+    <div className="card p-5">
+      <h2 className="mb-1 flex items-center gap-2 font-semibold">
+        <Package size={18} className="text-accent" /> Batch Pro kalitlar
+      </h2>
+      <p className="mb-3 text-sm text-muted">
+        Bir nechta Pro aktivatsiya kalitini birdaniga yaratish. Kalitlar <code>JPRO-XXXX-XXXX-XXXX</code> formatida.
+      </p>
+      <button onClick={() => { setKeys([]); setOpen(true) }} className="btn btn-outline">
+        <Zap size={15} /> Batch kalit yaratish
+      </button>
+
+      <Modal
+        open={open}
+        title="Batch Pro kalit yaratish"
+        onClose={() => setOpen(false)}
+        width="max-w-md"
+        footer={
+          keys.length > 0 ? (
+            <>
+              <button onClick={copyAll} className="btn btn-outline"><Copy size={14} /> Barchasini nusxalash</button>
+              <button onClick={exportCSV} className="btn btn-accent"><Download size={14} /> CSV yuklab olish</button>
+            </>
+          ) : (
+            <button onClick={generate} className="btn btn-accent"><Zap size={14} /> Yaratish</button>
+          )
+        }
+      >
+        {keys.length === 0 ? (
+          <Field label="Soni (1-50)">
+            <TextField
+              type="number"
+              min={1}
+              max={50}
+              value={String(qty)}
+              onChange={(e) => setQty(Math.min(50, Math.max(1, Number(e.target.value) || 1)))}
+            />
+          </Field>
+        ) : (
+          <div className="flex flex-col gap-1">
+            <p className="mb-2 text-sm font-medium">{keys.length} ta kalit yaratildi:</p>
+            <div className="max-h-64 overflow-y-auto rounded-lg border border-border bg-surface-2/60 p-2">
+              {keys.map((k, i) => (
+                <div key={i} className="flex items-center justify-between rounded px-2 py-1 text-xs odd:bg-surface/60">
+                  <code className="font-mono">{k}</code>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(k).then(() => toast.success('Nusxalandi'))}
+                    className="text-muted hover:text-accent"
+                  >
+                    <Copy size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  )
+}
+
+/** Feature 3: Mijoz loyihasini ko'rish (import qilish) */
+function ProjectImportCard() {
+  const toast = useToast()
+  const [stats, setStats] = useState<{
+    schoolName: string
+    classes: number
+    subjects: number
+    teachers: number
+    rooms: number
+    lessons: number
+    timetables: number
+  } | null>(null)
+  const [fileName, setFileName] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text) as Project
+      if (!data.school || !data.classes) throw new Error('Noto\'g\'ri format')
+      setStats({
+        schoolName: data.school.name || 'Nomsiz',
+        classes: data.classes?.length ?? 0,
+        subjects: data.subjects?.length ?? 0,
+        teachers: data.teachers?.length ?? 0,
+        rooms: data.rooms?.length ?? 0,
+        lessons: data.lessons?.length ?? 0,
+        timetables: data.timetables?.length ?? 0,
+      })
+      setFileName(file.name)
+    } catch {
+      toast.error("Fayl o'qib bo'lmadi — noto'g'ri format")
+      setStats(null)
+    }
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  return (
+    <div className="card p-5">
+      <h2 className="mb-1 flex items-center gap-2 font-semibold">
+        <FileText size={18} className="text-accent" /> Mijoz loyihasini ko'rish
+      </h2>
+      <p className="mb-3 text-sm text-muted">
+        Mijozning .jadvalpro yoki .json faylini yuklab, loyiha statistikasini ko'ring.
+      </p>
+      <label className="btn btn-outline cursor-pointer">
+        <Upload size={15} /> Fayl tanlash
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".jadvalpro,.json"
+          onChange={handleFile}
+          className="hidden"
+        />
+      </label>
+      {stats && (
+        <div className="mt-3 rounded-lg border border-border bg-surface-2/40 p-3">
+          <p className="mb-2 text-sm font-medium">{fileName}</p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
+            <Info label="Maktab" value={stats.schoolName} />
+            <Info label="Sinflar" value={String(stats.classes)} />
+            <Info label="Fanlar" value={String(stats.subjects)} />
+            <Info label="O'qituvchilar" value={String(stats.teachers)} />
+            <Info label="Xonalar" value={String(stats.rooms)} />
+            <Info label="Darslar" value={String(stats.lessons)} />
+            <Info label="Jadvallar" value={String(stats.timetables)} />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Feature 4: Jadval shablonlari */
+function TemplatesCard() {
+  const project = useProject((s) => s.project)
+  const setProject = useProject((s) => s.setProject)
+  const toast = useToast()
+  const [templates, setTemplates] = useState<TemplateRecord[]>([])
+  const [name, setName] = useState('')
+  const [showSave, setShowSave] = useState(false)
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('jadvalpro-templates')
+      if (raw) setTemplates(JSON.parse(raw))
+    } catch { /* ignore */ }
+  }, [])
+
+  const persist = (t: TemplateRecord[]) => {
+    setTemplates(t)
+    try { localStorage.setItem('jadvalpro-templates', JSON.stringify(t)) } catch { /* ignore */ }
+  }
+
+  const saveTemplate = () => {
+    if (!name.trim()) return toast.error('Shablon nomini kiriting')
+    const rec: TemplateRecord = {
+      id: uid('tpl_'),
+      name: name.trim(),
+      savedAt: new Date().toISOString(),
+      project: structuredClone(project),
+    }
+    persist([rec, ...templates])
+    toast.success(`"${name}" shablon sifatida saqlandi`)
+    setName('')
+    setShowSave(false)
+  }
+
+  const loadTemplate = (t: TemplateRecord) => {
+    if (!confirm(`"${t.name}" shablonini joriy loyihaga yuklaysizmi? Joriy ma'lumotlar o'zgaradi.`)) return
+    setProject(structuredClone(t.project))
+    toast.success(`"${t.name}" shabloni yuklandi`)
+  }
+
+  const removeTemplate = (id: string) => {
+    persist(templates.filter((t) => t.id !== id))
+    toast.success("Shablon o'chirildi")
+  }
+
+  return (
+    <div className="card p-5">
+      <h2 className="mb-1 flex items-center gap-2 font-semibold">
+        <FileText size={18} className="text-accent" /> Jadval shablonlari
+      </h2>
+      <p className="mb-3 text-sm text-muted">
+        Joriy loyihani shablon sifatida saqlang va keyin tezkor yuklang.
+      </p>
+
+      {showSave ? (
+        <div className="mb-3 flex gap-2">
+          <TextField
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Shablon nomi"
+            autoFocus
+            className="flex-1"
+          />
+          <button onClick={saveTemplate} className="btn btn-accent"><Save size={14} /> Saqlash</button>
+          <button onClick={() => setShowSave(false)} className="btn btn-outline">Bekor</button>
+        </div>
+      ) : (
+        <button onClick={() => setShowSave(true)} className="btn btn-outline mb-3">
+          <Save size={15} /> Joriy loyihani shablon sifatida saqlash
+        </button>
+      )}
+
+      {templates.length === 0 ? (
+        <p className="text-sm text-muted">Hali shablon yo'q.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {templates.map((t) => (
+            <div key={t.id} className="flex items-center gap-2 rounded-lg border border-border bg-surface-2/40 p-2.5 text-sm">
+              <FileText size={16} className="shrink-0 text-accent" />
+              <div className="flex-1">
+                <div className="font-medium">{t.name}</div>
+                <div className="text-xs text-muted">{new Date(t.savedAt).toLocaleDateString('uz')}</div>
+              </div>
+              <button onClick={() => loadTemplate(t)} className="btn btn-outline h-7 text-xs">
+                <Upload size={12} /> Yuklash
+              </button>
+              <button onClick={() => removeTemplate(t.id)} className="btn btn-outline h-7 px-1.5 text-danger">
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Feature 5: Telegram batch xabar */
+function TelegramBatchCard() {
+  const schools = useAuth((s) => s.schools)
+  const toast = useToast()
+  const [message, setMessage] = useState('')
+  const [progress, setProgress] = useState<{ sent: number; total: number } | null>(null)
+  const [sending, setSending] = useState(false)
+
+  const withPhone = schools.filter((s) => s.phone && !s.blocked)
+
+  const sendBatch = async () => {
+    if (!message.trim()) return toast.error('Xabar matnini kiriting')
+    if (withPhone.length === 0) return toast.error("Telefon raqami bor faol mijoz yo'q")
+    setSending(true)
+    setProgress({ sent: 0, total: withPhone.length })
+    for (let i = 0; i < withPhone.length; i++) {
+      const s = withPhone[i]
+      const phone = s.phone.replace(/[\s\-()]/g, '')
+      const encoded = encodeURIComponent(message.replace('{maktab}', s.schoolName).replace('{direktor}', s.director))
+      window.open(`https://t.me/share/url?url=&text=${encoded}`, '_blank')
+      setProgress({ sent: i + 1, total: withPhone.length })
+      // Biroz kutish — brauzer har popup uchun blok qilmasligi uchun
+      await new Promise((r) => setTimeout(r, 800))
+    }
+    setSending(false)
+    toast.success(`${withPhone.length} ta mijozga Telegram link ochildi`)
+  }
+
+  return (
+    <div className="card p-5">
+      <h2 className="mb-1 flex items-center gap-2 font-semibold">
+        <MessageSquare size={18} className="text-accent" /> Telegram batch xabar
+      </h2>
+      <p className="mb-3 text-sm text-muted">
+        Barcha faol mijozlarga (telefoni bor: {withPhone.length} ta) Telegram orqali xabar yuborish.
+        <code className="ml-1 text-accent">{'{maktab}'}</code> va <code className="text-accent">{'{direktor}'}</code> o'rniga ma'lumot qo'yiladi.
+      </p>
+      <textarea
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        placeholder="Assalomu alaykum, {direktor}! {maktab} uchun yangilik bor..."
+        rows={3}
+        className="input mb-3 w-full resize-y text-sm"
+      />
+      {progress && (
+        <div className="mb-3">
+          <div className="mb-1 text-sm font-medium">Yuborildi: {progress.sent}/{progress.total}</div>
+          <div className="h-2 overflow-hidden rounded-full bg-surface-2">
+            <div
+              className="h-full rounded-full bg-accent transition-all"
+              style={{ width: `${(progress.sent / progress.total) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+      <button onClick={sendBatch} disabled={sending} className="btn btn-accent disabled:opacity-50">
+        <Send size={15} /> {sending ? 'Yuborilmoqda...' : 'Barcha mijozlarga yuborish'}
+      </button>
+    </div>
+  )
+}
+
+/** Feature 6: Mijozlar eksporti (CSV) */
+function CustomerExportCard() {
+  const schools = useAuth((s) => s.schools)
+  const toast = useToast()
+
+  const exportCSV = () => {
+    const header = 'Maktab,Direktor,Telefon,Tarif,Login,Parol,Pro kalit,Qo\'shilgan,Bloklangan,Eslatma'
+    const rows = schools.map((s) =>
+      [
+        s.schoolName,
+        s.director,
+        s.phone,
+        s.plan,
+        s.login ?? '',
+        s.password ?? '',
+        s.key,
+        new Date(s.issuedAt).toLocaleDateString('uz'),
+        s.blocked ? 'Ha' : "Yo'q",
+        (s.notes ?? '').replace(/"/g, '""'),
+      ]
+        .map((v) => `"${v}"`)
+        .join(','),
+    )
+    const csv = '﻿' + header + '\n' + rows.join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'jadvalpro-mijozlar.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('CSV yuklandi')
+  }
+
+  const copyTable = () => {
+    const header = 'Maktab\tDirektor\tTelefon\tTarif\tLogin\tParol\tKalit\tSana\tBlok\tEslatma'
+    const rows = schools.map((s) =>
+      [s.schoolName, s.director, s.phone, s.plan, s.login ?? '', s.password ?? '', s.key, new Date(s.issuedAt).toLocaleDateString('uz'), s.blocked ? 'Ha' : "Yo'q", s.notes ?? ''].join('\t'),
+    )
+    navigator.clipboard.writeText(header + '\n' + rows.join('\n')).then(() => toast.success('Jadval nusxalandi'))
+  }
+
+  return (
+    <div className="card p-5">
+      <h2 className="mb-1 flex items-center gap-2 font-semibold">
+        <Download size={18} className="text-accent" /> Mijozlar eksporti
+      </h2>
+      <p className="mb-3 text-sm text-muted">
+        Barcha mijozlar ro'yxatini CSV (Excel) formatida yuklab olish yoki clipboard ga nusxalash.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button onClick={exportCSV} disabled={schools.length === 0} className="btn btn-outline disabled:opacity-40">
+          <Download size={15} /> Excel ga eksport ({schools.length})
+        </button>
+        <button onClick={copyTable} disabled={schools.length === 0} className="btn btn-outline disabled:opacity-40">
+          <Copy size={15} /> Nusxa olish
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** Feature 9: Masofadan yordam — mijoz loyihasini tekshirish */
+function RemoteHelpCard() {
+  const toast = useToast()
+  const [projectData, setProjectData] = useState<Project | null>(null)
+  const [fileName, setFileName] = useState('')
+  const [result, setResult] = useState<ValidationResult | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text) as Project
+      if (!data.school || !data.classes) throw new Error('Noto\'g\'ri format')
+      setProjectData(data)
+      setFileName(file.name)
+      setResult(null)
+    } catch {
+      toast.error("Fayl o'qib bo'lmadi — noto'g'ri format")
+      setProjectData(null)
+    }
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  const runValidation = () => {
+    if (!projectData) return
+    const r = validateProject(projectData)
+    setResult(r)
+  }
+
+  const downloadProject = () => {
+    if (!projectData) return
+    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName || 'project.jadvalpro'
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('Fayl yuklandi')
+  }
+
+  return (
+    <div className="card p-5">
+      <h2 className="mb-1 flex items-center gap-2 font-semibold">
+        <Wrench size={18} className="text-accent" /> Masofadan yordam
+      </h2>
+      <p className="mb-3 text-sm text-muted">
+        Mijozning loyiha faylini yuklab, xatolarni tekshiring va tuzatilgan faylni qaytaring.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <label className="btn btn-outline cursor-pointer">
+          <Upload size={15} /> Loyiha faylini yuklash
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".jadvalpro,.json"
+            onChange={handleFile}
+            className="hidden"
+          />
+        </label>
+        {projectData && (
+          <>
+            <button onClick={runValidation} className="btn btn-accent">
+              <AlertTriangle size={15} /> Xatolarni tekshirish
+            </button>
+            <button onClick={downloadProject} className="btn btn-outline">
+              <Download size={15} /> Faylni yuklab olish
+            </button>
+          </>
+        )}
+      </div>
+      {projectData && (
+        <div className="mt-3 rounded-lg border border-border bg-surface-2/40 p-3">
+          <p className="mb-1 text-sm font-medium">{fileName} — {projectData.school.name || 'Nomsiz'}</p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs sm:grid-cols-4">
+            <Info label="Sinflar" value={String(projectData.classes.length)} />
+            <Info label="Fanlar" value={String(projectData.subjects.length)} />
+            <Info label="O'qituvchilar" value={String(projectData.teachers.length)} />
+            <Info label="Darslar" value={String(projectData.lessons.length)} />
+          </div>
+        </div>
+      )}
+      {result && (
+        <div className="mt-3 rounded-lg border border-border p-3">
+          <div className="mb-2 flex items-center gap-2">
+            {result.ok ? (
+              <span className="chip bg-ok/15 text-ok"><Check size={12} /> Xato topilmadi</span>
+            ) : (
+              <span className="chip bg-danger/15 text-danger"><AlertTriangle size={12} /> {result.issues.filter((i) => i.severity === 'error').length} xato</span>
+            )}
+            {result.issues.filter((i) => i.severity === 'warning').length > 0 && (
+              <span className="chip bg-warn/15 text-warn">{result.issues.filter((i) => i.severity === 'warning').length} ogohlantirish</span>
+            )}
+          </div>
+          <p className="mb-2 text-xs text-muted">{result.summary}</p>
+          <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+            {result.issues.map((issue, i) => (
+              <div
+                key={i}
+                className={cx(
+                  'rounded-md px-2.5 py-1.5 text-xs',
+                  issue.severity === 'error' ? 'bg-danger/10 text-danger' : issue.severity === 'warning' ? 'bg-warn/10 text-warn' : 'bg-surface-2 text-muted',
+                )}
+              >
+                <span className="font-medium">{issue.message}</span>
+                {issue.hint && <span className="ml-1 text-muted"> — {issue.hint}</span>}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

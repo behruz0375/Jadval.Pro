@@ -3,6 +3,7 @@
 // Matnni tool-call ga aylantiradi. LLM rejimi yoqilmaganda ishlatiladi.
 // 3 til: UZ (lotin) · RU · EN. Internet talab qilmaydi.
 // ============================================================
+import { searchKnowledge as kbSearch } from './knowledge'
 
 export interface ToolCall {
   name: string
@@ -20,6 +21,7 @@ export type LocalIntent =
 export type ParseResult =
   | { type: 'tool'; call: ToolCall }
   | { type: 'local'; intent: LocalIntent }
+  | { type: 'knowledge'; answer: string; question: string }
   | { type: 'unknown'; text: string }
 
 type Entity = 'teacher' | 'class' | 'subject' | 'room' | 'lesson'
@@ -309,10 +311,27 @@ function mNavigate(t: string): ParseResult | null {
 export function parseCommand(input: string): ParseResult {
   const t = normalize(input)
   if (!t) return { type: 'unknown', text: input }
-  return (
+
+  // 1. Avval oddiy shabloniy matcherlarni sinab ko'ramiz
+  const matched =
     mClear(t) || mHelp(t) || mGreet(t) || mUndo(t) ||
     mPowerful(t) || mSchedule(t) || mFile(t) || mSettings(t) || mShow(t) ||
-    mAnalytics(t) || mBulkClasses(t) || mAdd(t) || mDelete(t) || mNavigate(t) ||
-    { type: 'unknown', text: input }
-  )
+    mAnalytics(t) || mBulkClasses(t) || mAdd(t) || mDelete(t) || mNavigate(t)
+
+  if (matched) return matched
+
+  // 2. Hech narsa mos kelmadi — bilimlar bazasidan izlaymiz
+  const kb = searchKB(input)
+  if (kb) return kb
+
+  return { type: 'unknown', text: input }
+}
+
+/** Bilimlar bazasidan javob izlash */
+function searchKB(input: string): ParseResult | null {
+  const match = kbSearch(input, 0.35)
+  if (match) {
+    return { type: 'knowledge', answer: match.entry.answer, question: match.entry.question }
+  }
+  return null
 }

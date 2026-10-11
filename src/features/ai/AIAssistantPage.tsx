@@ -21,6 +21,7 @@ import { cx } from '@/utils'
 import { Modal } from '@/components/Modal'
 import { Field } from '@/components/Field'
 import { useAIChat, type Msg } from './chatStore'
+import { RobotMascot, type RobotState } from './RobotMascot'
 
 
 const SAMPLES_UZ = [
@@ -87,6 +88,7 @@ export function AIAssistantPage() {
   const [generating, setGenerating] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [ttsOn, setTtsOn] = useState(() => { try { return localStorage.getItem('jp-ai-tts') === '1' } catch { return false } })
+  const [robotState, setRobotState] = useState<RobotState>('idle')
 
   const stopListeningRef = useRef<(() => void) | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -103,12 +105,14 @@ export function AIAssistantPage() {
     const t = raw.trim()
     if (!t || busy) return
     setBusy(true); setInput(''); setInterim('')
+    setRobotState('thinking')
     setMsgs((m) => [...m, { id: `u${Date.now()}`, role: 'user', text: t, ts: Date.now() }])
 
     // "to'xtat" — generatsiyani to'xtatish
     if (generating && /\b(to'xtat|toxtat|stop|останови|прерв)\b/i.test(t)) {
       stopGeneration(); setGenerating(false)
       pushAI("✓ To'xtatildi.", true)
+      setRobotState('idle')
       setBusy(false)
       return
     }
@@ -117,14 +121,22 @@ export function AIAssistantPage() {
     const quick = parseCommand(t)
     if (quick.type === 'local') {
       handleLocal(quick.intent.kind)
+      setRobotState(quick.intent.kind === 'greeting' || quick.intent.kind === 'thanks' ? 'happy' : 'idle')
       setBusy(false)
       return
     }
 
+    // Bilimlar bazasidan javob topildi
+    if (quick.type === 'knowledge') {
+      pushAI(quick.answer, true)
+      setRobotState('happy')
+      if (ttsOn && quick.answer) speak(quick.answer, ttsLang(lang))
+      setBusy(false)
+      setTimeout(() => setRobotState('idle'), 3000)
+      return
+    }
+
     // ======== GIBRID-TEZKOR rejim ========
-    // Offline parser oldin ishlab ko'radi — tushunsa, Gemini chaqirilmaydi.
-    // Faqat erkin tabiiy til (parser tushunmagan) uchun LLM ishlatiladi.
-    // Shu bilan Gemini bepul limiti juda kam sarf qilinadi.
     const offlineUnderstood = quick.type === 'tool'
     const isGen = quick.type === 'tool' && (quick.call.name === 'generate_timetable' || quick.call.name === 'improve_timetable')
 
@@ -132,10 +144,17 @@ export function AIAssistantPage() {
       if (isGen) { setGenerating(true); pushAI('Jadval tuzilmoqda… (to\'xtatish uchun "to\'xtat" deb yozing)', true) }
       const outcome = await runOffline(t)
       setGenerating(false)
-      if (outcome.local) { handleLocal(outcome.local); setBusy(false); return }
+      if (outcome.local) {
+        handleLocal(outcome.local)
+        setRobotState('idle')
+        setBusy(false)
+        return
+      }
       pushAI(outcome.message, outcome.ok)
+      setRobotState(outcome.ok ? 'happy' : outcome.message.includes('tushunolmadim') || outcome.message.includes('topilmadi') ? 'confused' : 'error')
       if (ttsOn && outcome.message) speak(outcome.message, ttsLang(lang))
       setBusy(false)
+      setTimeout(() => setRobotState('idle'), 4000)
       return
     }
 
@@ -150,23 +169,26 @@ export function AIAssistantPage() {
     })
     setGenerating(false)
 
-    // LLM muvaffaqiyatsiz (limit tugadi, internet yo'q, server xatosi, 400 va h.k.) — avtomatik chuqur OFFLINE NLU ga qaytamiz
+    // LLM muvaffaqiyatsiz
     if (!outcome.ok) {
       const isTransient = /limit|tugadi|429|quota|503|502|504|internet|ulanib|timeout|vaqt tugadi|server xatosi/i.test(outcome.message)
       if (isTransient) {
         pushAI(`⚠ ${outcome.message}\n\n💡 Offline NLU ga o'tdim, buyruqni o'zim tushunib bajaraman…`, undefined)
       }
-      // Chuqur offline NLU bilan qayta urinamiz — AI tugasa ham ishlaydi
       const fallback = await runOffline(t)
-      if (fallback.local) { handleLocal(fallback.local); setBusy(false); return }
+      if (fallback.local) { handleLocal(fallback.local); setRobotState('idle'); setBusy(false); return }
       pushAI(fallback.message, fallback.ok)
+      setRobotState(fallback.ok ? 'happy' : 'confused')
       if (ttsOn && fallback.message) speak(fallback.message, ttsLang(lang))
       setBusy(false)
+      setTimeout(() => setRobotState('idle'), 4000)
       return
     }
     if (outcome.message) pushAI(outcome.message, true)
+    setRobotState('happy')
     if (ttsOn && outcome.message) speak(outcome.message, ttsLang(lang))
     setBusy(false)
+    setTimeout(() => setRobotState('idle'), 4000)
   }
 
   const handleLocal = (kind: 'help' | 'greeting' | 'thanks' | 'clear' | 'undo') => {
@@ -185,7 +207,7 @@ export function AIAssistantPage() {
   }
 
   const startRecognition = (recLang: 'uz-UZ' | 'ru-RU' | 'en-US', triedFallback = false) => {
-    setListening(true); setInterim('')
+    setListening(true); setInterim(''); setRobotState('listening')
     stopListeningRef.current = listenOnce({
       lang: recLang,
       interim: (p) => setInterim(p),
@@ -208,8 +230,8 @@ export function AIAssistantPage() {
   }
 
   const toggleListen = async () => {
-    if (listening) { stopListeningRef.current?.(); setListening(false); return }
-    if (!isVoiceSupported()) { pushAI(voiceErrorMessage('not-supported'), false); return }
+    if (listening) { stopListeningRef.current?.(); setListening(false); setRobotState('idle'); return }
+    if (!isVoiceSupported()) { pushAI(voiceErrorMessage('not-supported'), false); setRobotState('error'); return }
     // Avval mikrofon ruxsatini so'raymiz — brauzer ruxsat oynasini chiqaradi
     const perm = await requestMicPermission()
     if (perm === 'denied') { pushAI(voiceErrorMessage('not-allowed'), false); return }
@@ -230,7 +252,7 @@ export function AIAssistantPage() {
   const samples = lang === 'ru' ? SAMPLES_RU : lang === 'en' ? SAMPLES_EN : SAMPLES_UZ
 
   return (
-    <div className="fade-in flex h-full flex-col">
+    <div className="fade-in flex flex-col" style={{ height: '100%', minHeight: 0 }}>
       {/* Sarlavha */}
       <div className="flex items-center gap-3 border-b border-border px-5 py-3">
         <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-accent to-indigo-500 text-white shadow-soft">
@@ -267,9 +289,22 @@ export function AIAssistantPage() {
       </div>
 
       {/* Suhbat */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4"
-        style={{ background: 'linear-gradient(180deg, rgba(99,102,241,0.03), transparent)' }}>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4" style={{ minHeight: 0, background: 'linear-gradient(180deg, rgba(99,102,241,0.03), transparent)' }}>
         <div className="mx-auto max-w-3xl space-y-3">
+          {/* Robot maskot — suhbat boshida katta, keyin kichik */}
+          {msgs.length <= 2 && (
+            <div className="flex flex-col items-center pb-4 pt-2">
+              <RobotMascot state={robotState} size={100} />
+              <p className="mt-2 text-center text-xs text-muted">
+                {robotState === 'listening' ? 'Eshityapman...' :
+                 robotState === 'thinking' ? "O'ylayapman..." :
+                 robotState === 'happy' ? 'Bajarildi!' :
+                 robotState === 'confused' ? 'Tushunmadim...' :
+                 robotState === 'error' ? 'Xatolik yuz berdi' :
+                 'Buyruq yozing yoki ayting'}
+              </p>
+            </div>
+          )}
           {msgs.map((m) => <MsgBubble key={m.id} msg={m} />)}
           {interim && (
             <div className="flex justify-end">
@@ -278,14 +313,26 @@ export function AIAssistantPage() {
           )}
           {busy && (
             <div className="flex items-center gap-2 text-xs text-muted">
+              <RobotMascot state={robotState} size={36} />
               <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent" />
               {generating ? 'Jadval tuzilmoqda…' : llmOn ? "O'ylayapman…" : 'Bajarilmoqda…'}
               {generating && (
-                <button onClick={() => { stopGeneration(); setGenerating(false); setBusy(false); pushAI("✓ To'xtatildi.", true) }}
+                <button onClick={() => { stopGeneration(); setGenerating(false); setBusy(false); setRobotState('idle'); pushAI("✓ To'xtatildi.", true) }}
                   className="ml-2 inline-flex items-center gap-1 rounded-md bg-danger/15 px-2 py-0.5 text-danger hover:bg-danger/25">
                   <Square size={10} /> To'xtatish
                 </button>
               )}
+            </div>
+          )}
+          {/* Kichik robot — suhbat davomida (faqat busy bo'lmaganda, msgs > 2) */}
+          {!busy && msgs.length > 2 && robotState !== 'idle' && (
+            <div className="flex items-center gap-2">
+              <RobotMascot state={robotState} size={36} />
+              <span className="text-xs text-muted">
+                {robotState === 'happy' ? 'Tayyor!' :
+                 robotState === 'confused' ? 'Tushunmadim...' :
+                 robotState === 'error' ? 'Xatolik...' : ''}
+              </span>
             </div>
           )}
         </div>

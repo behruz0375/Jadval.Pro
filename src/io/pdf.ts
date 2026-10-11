@@ -160,7 +160,15 @@ function gridRows(project: Project, version: TimetableVersion, mode: PdfMode, id
 }
 
 const entityName = (project: Project, mode: PdfMode, id: string): string => {
-  if (mode === 'class') return project.classes.find((c) => c.id === id)?.name ?? ''
+  if (mode === 'class') {
+    const cls = project.classes.find((c) => c.id === id)
+    const name = cls?.name ?? ''
+    if (cls?.classTeacherId) {
+      const ct = project.teachers.find((t) => t.id === cls.classTeacherId)
+      if (ct) return `${name} — Sinf rahbari: ${ct.short}`
+    }
+    return name
+  }
   if (mode === 'teacher') return project.teachers.find((t) => t.id === id)?.fullName ?? ''
   return project.rooms.find((r) => r.id === id)?.name ?? ''
 }

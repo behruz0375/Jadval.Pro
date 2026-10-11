@@ -15,6 +15,7 @@ import { runGenerateAsync, runImproveAsync, type GenRunHandle } from './generato
 import { findTool, type ToolContext, type ToolResult } from './tools'
 import { parseCommand } from './parser'
 import { understand, rememberContext, resolveEntity, extractDay } from './offlineNLU'
+import { searchKnowledgeMulti } from './knowledge'
 import { runLLMTurn, type LLMConfig, type LLMHooks } from './llm'
 import { useAIChat } from './chatStore'
 
@@ -141,6 +142,10 @@ export function useAIEngine() {
       const result = await executeOne(parsed.call.name, parsed.call.args)
       return { ok: result.ok, message: result.message }
     }
+    // Bilimlar bazasidan javob topildi
+    if (parsed.type === 'knowledge') {
+      return { ok: true, message: parsed.answer }
+    }
 
     // 2. Chuqur NLU — tabiiy tilni fuzzy matching + ko'p sinonim + context bilan tushunadi
     const project = useProject.getState().project
@@ -172,7 +177,16 @@ export function useAIEngine() {
       return { ok: anyOk, message: messages.join('\n') }
     }
 
-    // 3. Umuman tushunmadim
+    // 3. Bilimlar bazasidan tegishli mavzular tavsiya qilish
+    const relatedKB = searchKnowledgeMulti(text, 2, 0.2)
+    if (relatedKB.length > 0) {
+      const suggestions = relatedKB.map((m) => `  "${m.entry.question}"`).join('\n')
+      return {
+        ok: false,
+        message: `Aniq tushunolmadim, lekin balki quyidagilardan biri kerakdir:\n${suggestions}\n\nShu savollardan birini yozing yoki boshqacha ayting.`,
+      }
+    }
+
     return {
       ok: false,
       message: `"${text}" — tushunolmadim. Boshqacha ayting (masalan: "jadval tuz", "5-A sinfni ko'rsat", "Aliyev yuklamasi") yoki "yordam" deb yozing.`,

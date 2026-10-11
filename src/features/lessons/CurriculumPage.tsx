@@ -6,9 +6,11 @@ import { ImportDialog } from '@/features/import/ImportDialog'
 import { useT } from '@/i18n'
 import { cx } from '@/utils'
 import type { Lesson } from '@/types'
+import { useExpiry } from '@/features/pro/useExpiry'
 
 export function CurriculumPage() {
   const t = useT()
+  const { isReadOnly } = useExpiry()
   const project = useProject((s) => s.project)
   const addLesson = useProject((s) => s.addLesson)
   const updateLesson = useProject((s) => s.updateLesson)
@@ -58,7 +60,7 @@ export function CurriculumPage() {
         <span className="ml-1 hidden text-sm text-muted sm:inline">
           {t('Sinf × Fan — haftalik soatlar')}
         </span>
-        <button onClick={() => setImportOpen(true)} className="btn btn-accent hover-lift ml-auto">
+        <button onClick={() => setImportOpen(true)} disabled={isReadOnly} className="btn btn-accent hover-lift ml-auto disabled:opacity-40" title={isReadOnly ? t("Muddat tugagan — faqat ko'rish rejimi") : undefined}>
           <FileSpreadsheet size={16} /> {t('Exceldan import')}
         </button>
       </div>
@@ -127,10 +129,12 @@ export function CurriculumPage() {
                               max={16}
                               value={val || ''}
                               placeholder="·"
-                              onChange={(e) => setCell(c.id, s.id, Math.max(0, +e.target.value || 0))}
+                              readOnly={isReadOnly}
+                              onChange={(e) => !isReadOnly && setCell(c.id, s.id, Math.max(0, +e.target.value || 0))}
                               className={cx(
                                 'h-9 w-12 bg-transparent text-center outline-none transition-colors focus:bg-accent/10',
                                 val > 0 ? 'font-semibold text-ink' : 'text-muted',
+                                isReadOnly && 'cursor-not-allowed',
                               )}
                             />
                           </td>

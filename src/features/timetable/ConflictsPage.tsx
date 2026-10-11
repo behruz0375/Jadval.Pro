@@ -157,7 +157,7 @@ export function ConflictsPage() {
   const hard = conflicts.filter((c) => ['teacher', 'class', 'room'].includes(c.type))
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
+    <div className="flex flex-col gap-4 p-4 pb-8">
       <div className="flex items-center gap-2">
         <div className="grid h-9 w-9 place-items-center rounded-lg bg-accent/15 text-accent">
           <AlertTriangle size={20} />
