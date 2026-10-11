@@ -10,6 +10,7 @@
     "build:strict": "tsc -b && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
+    "start": "serve -s dist",
     "lint": "eslint .",
     "tauri": "tauri"
   },
@@ -25,6 +26,7 @@
     "lucide-react": "^0.447.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "serve": "^14.2.6",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^4.5.5"
   },
