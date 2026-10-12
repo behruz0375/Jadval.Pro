@@ -33,7 +33,10 @@ export interface ImportSummary {
   classes: number
   subjects: number
   teachers: number
+  /** Yangi yaratilgan darslar */
   lessons: number
+  /** Mavjud darslar yangilandi (soat o'zgartirildi yoki o'qituvchi tayinlandi) */
+  updated: number
   hours: number
 }
 
@@ -53,16 +56,18 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0
 }
 
-/** Sinf nomiga o'xshaydimi? Juda keng — "5-A", "11B", "6", "5А", "10 A", "9в", "1-sinf A" */
+/** Sinf nomiga o'xshaydimi? Juda keng — "5-A", "11B", "6", "5А", "10 A", "9в", "1-sinf A", "IV-A" */
 function looksLikeClass(h: string): boolean {
   const t = s(h).replace(/\s+/g, ' ')
-  if (!t || t.length > 15) return false
-  // Faqat raqam (1-11): sinf raqami (A/B/V ustki qatorda bo'lishi mumkin)
+  if (!t || t.length > 20) return false
+  // Faqat raqam (1-12): sinf raqami (A/B/V ustki qatorda bo'lishi mumkin)
   if (/^(1[0-2]|[1-9])$/.test(t)) return true
-  // Raqam + harf: "5-A", "11B", "6V", "9 в", "10А"
-  if (/^(1[0-2]|[1-9])\s*[-–—.·]?\s*[A-Za-zА-Яа-яЁёЎўҚқҒғҲҳ]{1,4}$/i.test(t)) return true
+  // Raqam + harf (tirnoq ham bo'lishi mumkin): "5-A", "11B", "6V", "9 в", "10А", "5-\"A\""
+  if (/^(1[0-2]|[1-9])\s*[-–—.·]?\s*["«»"'']?[A-Za-zА-Яа-яЁёЎўҚқҒғҲҳ]{1,4}["«»"'']?$/i.test(t)) return true
   // "1-sinf", "9-sinf A" — "sinf"/"class"/"класс" so'zi bilan
-  if (/(sinf|класс|class)/i.test(t) && /\d/.test(t)) return true
+  if (/(sinf|класс|class|guruh|группа)/i.test(t) && /\d/.test(t)) return true
+  // Rim raqamlari: "I-A", "IX-B", "XI"
+  if (/^(X{0,2}(IX|IV|V?I{0,3}))\s*[-–—.·]?\s*["«»"'']?[A-Za-zА-Яа-яЁёЎўҚқҒғҲҳ]{0,4}["«»"'']?$/i.test(t)) return true
   return false
 }
 
@@ -74,9 +79,9 @@ function normalizeClassName(raw: string): string {
   return s(raw).replace(/\s+/g, ' ')
 }
 
-const TEACHER_RE = /f\.?\s*i\.?\s*(sh)?|familiya|o'?qituv|ustoz|муаллим|учител|ф\.?и\.?о|teacher|преподават/i
+const TEACHER_RE = /f\.?\s*i\.?\s*(sh|o)?|familiya|o'?qituv|ustoz|муаллим|учител|ф\.?и\.?о|teacher|преподават/i
 const SUBJECT_RE = /^fan|fani|predmet|dars nomi|предмет|subject|дисциплин/i
-const SKIP_HEADER_RE = /^(jami|jami soat|umumiy|umumiy soat|soat|summa|итог|всего|stavka|stavkasi|soni|total|haftaga|хафтага)$/i
+const SKIP_HEADER_RE = /^(jami|jami soat|umumiy|umumiy soat|soat|soat soni|yillik|yillik soat|yillik soati|summa|итог|всего|всего часов|stavka|stavkasi|soni|total|haftaga|хафтага|#|№|no\.?|t\/r|t\.r\.|nomer|номер|row|строка|р\/с|р\.с\.|tartib|tartib raqami)$/i
 /** Qatorda bu matn bo'lsa — o'qituvchi emas, umumlashtirilgan qator */
 const SKIP_ROW_RE = /^(jami|umumiy|итог|всего|total|сумм)/i
 
@@ -197,15 +202,16 @@ export function autoDetect(rows: string[][]): Mapping {
   }
 
   const classCols: number[] = []
+  // 1-bosqich: sinf nomiga o'xshagan sarlavha + raqamli data bo'lgan ustunlar (joylashuvdan qat'iy nazar)
   for (let i = 0; i < header.length; i++) {
     if (i === teacherCol || i === subjectCol) continue
     const h = header[i]
+    if (SKIP_HEADER_RE.test(h || '')) continue
     if (!h) continue
-    if (SKIP_HEADER_RE.test(h)) continue
-    if (i > subjectCol && (looksLikeClass(h) || hasNumericData(rows, headerRow, i))) classCols.push(i)
+    if (looksLikeClass(h) || hasNumericData(rows, headerRow, i)) classCols.push(i)
   }
 
-  // Agar sinf ustunlari topilmasa va 2-qatorli sarlavha gipotezasi yordam bersa
+  // 2-bosqich: 2 qatorli sarlavha gipotezasi
   if (classCols.length === 0 && !synthesized && headerRow + 1 < rows.length) {
     const h2 = combinedHeader(rows, headerRow, headerRow + 1)
     for (let i = 0; i < h2.length; i++) {
@@ -215,33 +221,79 @@ export function autoDetect(rows: string[][]): Mapping {
     if (classCols.length > 0) return { headerRow: headerRow + 1, teacherCol, subjectCol, classCols }
   }
 
+  // 3-bosqich: oxirgi fallback — har qanday raqamli data'li ustunni sinf ustuni deb olish
+  if (classCols.length === 0) {
+    const width = Math.max(header.length, ...rows.slice(headerRow + 1, headerRow + 10).map((r) => r?.length ?? 0))
+    for (let i = 0; i < width; i++) {
+      if (i === teacherCol || i === subjectCol) continue
+      if (SKIP_HEADER_RE.test(header[i] || '')) continue
+      if (hasNumericData(rows, headerRow, i)) classCols.push(i)
+    }
+  }
+
   return { headerRow, teacherCol, subjectCol, classCols }
 }
 
 /** Qo'lda tuzatishdan keyin mappingni qayta hisoblash (sinf ustunlarini topadi) */
 export function remap(rows: string[][], headerRow: number, teacherCol: number, subjectCol: number): Mapping {
-  const header = rows[headerRow] ?? []
+  const prev = Math.max(0, headerRow - 1)
+  const headerCombined = combinedHeader(rows, prev, headerRow)
+  const headerPlain = rows[headerRow]?.map(s) ?? []
+  const header =
+    headerCombined.filter((c) => looksLikeClass(c)).length > headerPlain.filter((c) => looksLikeClass(c)).length
+      ? headerCombined
+      : headerPlain
   const classCols: number[] = []
   for (let i = 0; i < header.length; i++) {
     if (i === teacherCol || i === subjectCol) continue
     const h = header[i]
-    if (!h || SKIP_HEADER_RE.test(h)) continue
-    if (i > subjectCol && (looksLikeClass(h) || hasNumericData(rows, headerRow, i))) classCols.push(i)
+    if (SKIP_HEADER_RE.test(h || '')) continue
+    if (!h) continue
+    if (looksLikeClass(h) || hasNumericData(rows, headerRow, i)) classCols.push(i)
+  }
+  // Fallback: hech narsa topilmasa, raqamli data'li ustunlarni oladi
+  if (classCols.length === 0) {
+    const width = Math.max(header.length, ...rows.slice(headerRow + 1, headerRow + 10).map((r) => r?.length ?? 0))
+    for (let i = 0; i < width; i++) {
+      if (i === teacherCol || i === subjectCol) continue
+      if (SKIP_HEADER_RE.test(header[i] || '')) continue
+      if (hasNumericData(rows, headerRow, i)) classCols.push(i)
+    }
   }
   return { headerRow, teacherCol, subjectCol, classCols }
+}
+
+/** Qo'lda sinf ustunlarini belgilash (toggle) */
+export function toggleClassCol(m: Mapping, col: number): Mapping {
+  const set = new Set(m.classCols)
+  if (set.has(col)) set.delete(col)
+  else set.add(col)
+  return { ...m, classCols: [...set].sort((a, b) => a - b) }
 }
 
 function hasNumericData(rows: string[][], headerRow: number, col: number): boolean {
   let numeric = 0
   let total = 0
-  for (let r = headerRow + 1; r < Math.min(rows.length, headerRow + 20); r++) {
+  // Row-number ustunini aniqlash: 1,2,3,4,... ketma-ket raqamlar
+  let seqMatches = 0
+  let seqChecked = 0
+  for (let r = headerRow + 1; r < Math.min(rows.length, headerRow + 25); r++) {
     const v = rows[r]?.[col]
-    if (s(v)) {
+    const str = s(v)
+    if (str) {
       total++
-      if (num(v) > 0) numeric++
+      const n = num(v)
+      if (n > 0) numeric++
+      // Ketma-ket raqam tekshiruvi (r - headerRow kabi)
+      const expected = r - headerRow
+      if (n === expected) seqMatches++
+      seqChecked++
     }
   }
-  return total > 0 && numeric / total >= 0.5
+  if (total === 0) return false
+  // Agar aksariyat qiymatlar ketma-ket row-number bo'lsa — bu sinf ustuni emas
+  if (seqChecked >= 3 && seqMatches / seqChecked >= 0.8) return false
+  return numeric / total >= 0.3
 }
 
 /** Mapping asosida qatorlarni o'qish:
@@ -263,8 +315,8 @@ export function buildParsed(rows: string[][], m: Mapping): Parsed {
   const classByCol: Record<number, string> = {}
   for (const i of m.classCols) {
     const raw = s(header[i])
-    if (!raw) continue
-    const cn = normalizeClassName(raw)
+    // Sarlavha bo'sh bo'lsa — ustun harfidan "Sinf-X" nomini yaratamiz (foydalanuvchi keyin tahrirlaydi)
+    const cn = raw ? normalizeClassName(raw) : `Sinf-${colLetter(i)}`
     classByCol[i] = cn
     if (!classNames.includes(cn)) classNames.push(cn)
   }
@@ -331,13 +383,33 @@ export function pickBestSheet(sheets: SheetData[]): SheetData | null {
   return best
 }
 
-/** Import natijasini loyihaga qo'llash (mavjudlarini topib yoki yaratib) */
+/** Noma'qul "sinf" nomlari: ustun qator-raqami yoki noma'noli belgi.
+ *  Bular hech qachon haqiqiy sinf nomi bo'lmaydi — ularni import jarayonida chetlab o'tamiz. */
+const INVALID_CLASS_NAME_RE = /^(#|№|n|no\.?|t\/r|t\.r\.|nomer|номер|row|строка|р\/с|р\.с\.|tartib|xona|xonalar|room|каб|каб\.|кабинет|-|—|–|\.|,|\s*)$/i
+export const isInvalidClassName = (name: string): boolean => INVALID_CLASS_NAME_RE.test((name || '').trim())
+
+/** Import natijasini loyihaga qo'llash (mavjudlarini topib yoki yaratib).
+ *  Qayta-import xavfsiz: mavjud darslar soatlari qo'shilmaydi, aksincha import qiymati bilan
+ *  yangilanadi (shu bilan 2 marta import qilsangiz, soatlar 2 barobar bo'lib ketmaydi). */
 export function applyImport(parsed: Parsed, project: Project): { project: Project; summary: ImportSummary } {
   const classes = [...project.classes]
   const subjects = [...project.subjects]
   const teachers = [...project.teachers]
   const lessons = [...project.lessons]
-  const summary: ImportSummary = { classes: 0, subjects: 0, teachers: 0, lessons: 0, hours: 0 }
+  const summary: ImportSummary = { classes: 0, subjects: 0, teachers: 0, lessons: 0, updated: 0, hours: 0 }
+  /** Shu import davomida yaratilgan yoki yangilangan dars ID'lari (bir xil fayldagi takroriy
+   *  qatorlarda soatlar to'g'ri jamlanishi uchun). */
+  const touchedInThisBatch = new Set<string>()
+
+  // Noma'qul sinf nomlarini chetlab o'tamiz (masalan "#", "Xona", "№" avvalgi bug'li importdan)
+  const validClassNames = parsed.classNames.filter(cn => !isInvalidClassName(cn))
+  const parsedRows = parsed.rows.map(r => ({
+    ...r,
+    hours: Object.fromEntries(
+      Object.entries(r.hours).filter(([cn]) => !isInvalidClassName(cn)),
+    ),
+  }))
+  parsed = { classNames: validClassNames, rows: parsedRows }
 
   const lc = (x: string) => x.trim().toLowerCase()
   const classKey = (x: string) => normalizeClassName(x).toLowerCase()
@@ -389,12 +461,26 @@ export function applyImport(parsed: Parsed, project: Project): { project: Projec
           (teacherId ? l.teacher1Id === teacherId : true),
       )
       if (existingIdx >= 0) {
-        // Bir xil kombinatsiya bir necha marta kelsa (chorak/semestr bo'yicha) — soatlarni qo'shamiz
         const existing = lessons[existingIdx]
-        lessons[existingIdx] = {
-          ...existing,
-          hoursPerWeek: existing.hoursPerWeek + h,
-          teacher1Id: teacherId || existing.teacher1Id,
+        if (touchedInThisBatch.has(existing.id)) {
+          // Shu import davomida yaratilgan/yangilangan dars — bir xil kombinatsiya 2 marta
+          // kelsa (chorak/semestr), soatlarni jamlaymiz
+          lessons[existingIdx] = {
+            ...existing,
+            hoursPerWeek: existing.hoursPerWeek + h,
+            teacher1Id: teacherId || existing.teacher1Id,
+          }
+        } else {
+          // Loyihada avvaldan mavjud bo'lgan dars — soatni ALMASHTIRAMIZ (qo'shmaymiz).
+          // Shu bilan bir xil Excel'ni 2 marta import qilsangiz, soatlar duplicatelanmaydi.
+          const changed = existing.hoursPerWeek !== h || (teacherId && existing.teacher1Id !== teacherId)
+          lessons[existingIdx] = {
+            ...existing,
+            hoursPerWeek: h,
+            teacher1Id: teacherId || existing.teacher1Id,
+          }
+          if (changed) summary.updated++
+          touchedInThisBatch.add(existing.id)
         }
       } else {
         const l = newLesson(project.school)
@@ -403,6 +489,7 @@ export function applyImport(parsed: Parsed, project: Project): { project: Projec
         l.teacher1Id = teacherId
         l.hoursPerWeek = h
         lessons.push(l)
+        touchedInThisBatch.add(l.id)
         summary.lessons++
       }
       summary.hours += h
@@ -410,6 +497,17 @@ export function applyImport(parsed: Parsed, project: Project): { project: Projec
   }
 
   return { project: { ...project, classes, subjects, teachers, lessons }, summary }
+}
+
+/** Ustun indeksini Excel harfiga aylantiradi (0 → A, 25 → Z, 26 → AA) */
+export function colLetter(i: number): string {
+  let n = i
+  let out = ''
+  do {
+    out = String.fromCharCode(65 + (n % 26)) + out
+    n = Math.floor(n / 26) - 1
+  } while (n >= 0)
+  return out
 }
 
 /** Namuna shablon faylni yuklab berish */

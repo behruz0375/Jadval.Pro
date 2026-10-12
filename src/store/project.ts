@@ -27,6 +27,11 @@ interface ProjectState {
   newProject: () => void
   markSaved: () => void
   switchScope: (newScope: string) => Promise<void>
+  /** Scope'dagi loyihani butunlay o'chirish (admin'ning avvalgi "oqib ketgan" ma'lumotlarini tozalash uchun).
+   *  Joriy scope o'chirilsa — defaultProject() yuklanadi. */
+  resetScope: (scope: string) => Promise<void>
+  /** Scope'ga xavfsiz o'tish: joriy loyihani boshqa scope'ga saqlamaydi. */
+  loadScope: (newScope: string) => Promise<void>
 
   // Maktab
   updateSchool: (patch: Partial<School>) => void
@@ -113,6 +118,30 @@ export const useProject = create<ProjectState>()(
                   return t
                 })
               }
+            } catch {
+              project = defaultProject()
+            }
+          } else {
+            project = defaultProject()
+          }
+          set({ project, scope: newScope, dirty: false })
+        },
+        resetScope: async (scope: string) => {
+          await idbStorage.removeItem(`jadvalpro-project-scope:${scope}`)
+          if (get().scope === scope) {
+            set({ project: defaultProject(), dirty: false })
+          }
+        },
+        /** Scope'ga xavfsiz o'tish: joriy xotira'dagi loyihani BOSHQA scope'ga yozmaydi.
+         *  Faqat yangi scope'dan loyiha o'qiydi (yoki defaultProject). Admin'ning ma'lumotlari
+         *  mijozning scope'iga ko'chib ketmasligi uchun ishlatiladi. */
+        loadScope: async (newScope: string) => {
+          const stored = await idbStorage.getItem(`jadvalpro-project-scope:${newScope}`)
+          let project: Project
+          if (stored) {
+            try {
+              const parsed = JSON.parse(stored as string)
+              project = parsed?.state?.project ?? defaultProject()
             } catch {
               project = defaultProject()
             }

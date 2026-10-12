@@ -13,6 +13,7 @@ export default defineConfig({
     outDir: 'dist',
   },
   server: {
-    port: Number(process.env.PORT) || 5180,
+    port: Number(process.env.PORT) || 5181,
+    strictPort: false,
   },
 })

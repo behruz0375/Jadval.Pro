@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, Home } from 'lucide-react'
 import { useUI } from '@/store/ui'
 import { useAuth } from '@/store/auth'
+import { useProject } from '@/store/project'
 import { panelsForRole, findPanel } from './panels'
 import { TopBar } from './TopBar'
 import { Sidebar } from './Sidebar'
@@ -43,6 +44,24 @@ export function Shell() {
   useEffect(() => {
     if (authRole && authRole !== role) setRole(authRole)
   }, [authRole, role, setRole])
+
+  // XAVFSIZLIK invarianti: scope ↔ role mos kelishi shart.
+  // Admin => `_owner_` scope, Zavuch/O'TIBDO' => `staff:<director_login>` scope.
+  // Mos kelmasa — xavfsiz tarzda to'g'ri scope'dan loyihani yuklab olamiz
+  // (joriy xotira'dagi loyihani boshqa scope'ga yozmaymiz — oqib ketish bo'lmaydi).
+  useEffect(() => {
+    if (!authRole || authRole === 'teacher' || authRole === 'student') return
+    const curScope = useProject.getState().scope
+    let expected: string | null = null
+    if (authRole === 'owner') expected = '_owner_'
+    else {
+      const dir = useAuth.getState().staff.director?.login
+      if (dir) expected = `staff:${dir.toLowerCase().trim()}`
+    }
+    if (expected && curScope !== expected) {
+      void useProject.getState().loadScope(expected)
+    }
+  }, [authRole])
 
   // Faol panel joriy rolga tegishli bo'lishini ta'minlash
   useEffect(() => {

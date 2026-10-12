@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import { AlertTriangle, Trash2, Eraser, RotateCcw } from 'lucide-react'
+import { AlertTriangle, Trash2, Eraser, RotateCcw, Wrench } from 'lucide-react'
 import { useProject } from '@/store/project'
 import { useToast } from '@/store/toast'
 import { useT } from '@/i18n'
 import { Modal } from '@/components/Modal'
 import { defaultProject } from '@/data/factories'
+import { isInvalidClassName } from '@/io/importTaqsimot'
 import type { Project } from '@/types'
 
-type Action = 'timetables' | 'project' | 'all'
+type Action = 'timetables' | 'project' | 'all' | 'fix-invalid'
 
 export function DangerZoneCard() {
   const t = useT()
@@ -18,6 +19,14 @@ export function DangerZoneCard() {
   const [confirming, setConfirming] = useState<Action | null>(null)
   const [typedConfirm, setTypedConfirm] = useState('')
 
+  // Noma'qul sinflarni (masalan "#", "Xona") va ularning darslarini aniqlaymiz
+  const invalidClasses = project.classes.filter(c => isInvalidClassName(c.name) || isInvalidClassName(c.short || ''))
+  const invalidClassIds = new Set(invalidClasses.map(c => c.id))
+  const brokenLessons = project.lessons.filter(l => l.classIds.some(id => invalidClassIds.has(id)))
+  // Juda ko'p soatli darslar (bug tufayli duplicatelangan)
+  const bloatedLessons = project.lessons.filter(l => l.hoursPerWeek > 50)
+  const needsFix = invalidClasses.length > 0 || bloatedLessons.length > 0
+
   const actions: {
     id: Action
     icon: typeof Trash2
@@ -25,7 +34,17 @@ export function DangerZoneCard() {
     desc: string
     counts: () => string
     danger: 'low' | 'mid' | 'high'
+    hidden?: boolean
   }[] = [
+    {
+      id: 'fix-invalid',
+      icon: Wrench,
+      title: t('Buzilgan ma\'lumotlarni tozalash'),
+      desc: t('Noma\'qul sinflarni (#, Xona, №) va juda katta soatli darslarni (>50) o\'chiradi. Normal sinflar va darslar tegilmaydi.'),
+      counts: () => `${invalidClasses.length} sinf, ${brokenLessons.length + bloatedLessons.length} dars`,
+      danger: 'low',
+      hidden: !needsFix,
+    },
     {
       id: 'timetables',
       icon: Eraser,
@@ -60,6 +79,7 @@ export function DangerZoneCard() {
     confirming === 'timetables' ? 'JADVAL'
     : confirming === 'project' ? 'TOZALA'
     : confirming === 'all' ? 'HAMMASI'
+    : confirming === 'fix-invalid' ? 'TUZAT'
     : ''
 
   const perform = () => {
@@ -68,7 +88,15 @@ export function DangerZoneCard() {
       toast.error(t('Tasdiqlash so\'zi noto\'g\'ri'))
       return
     }
-    if (confirming === 'timetables') {
+    if (confirming === 'fix-invalid') {
+      // Noma'qul sinflarni va ularning darslarini + juda katta soatli darslarni o'chiramiz
+      const nextClasses = project.classes.filter(c => !invalidClassIds.has(c.id))
+      const nextLessons = project.lessons.filter(l =>
+        !l.classIds.some(id => invalidClassIds.has(id)) && l.hoursPerWeek <= 50
+      )
+      setProject({ ...project, classes: nextClasses, lessons: nextLessons })
+      toast.success(`${invalidClasses.length} sinf va ${brokenLessons.length + bloatedLessons.length} dars tozalandi`)
+    } else if (confirming === 'timetables') {
       const next: Project = { ...project, timetables: [] }
       setProject(next)
       toast.success(t('Barcha jadvallar o\'chirildi'))
@@ -119,7 +147,7 @@ export function DangerZoneCard() {
       </div>
 
       <div className="space-y-2">
-        {actions.map((a) => {
+        {actions.filter(a => !a.hidden).map((a) => {
           const Icon = a.icon
           return (
             <button
@@ -165,7 +193,9 @@ export function DangerZoneCard() {
                   ? t('Butun loyiha standart holatga qaytariladi!')
                   : confirming === 'project'
                     ? t('Barcha sinf, fan, o\'qituvchi, xona, dars va jadvallar o\'chadi!')
-                    : t('Barcha tuzilgan jadvallar o\'chadi!')}
+                    : confirming === 'fix-invalid'
+                      ? `${invalidClasses.length} ta noma'qul sinf (${invalidClasses.map(c => c.name).join(', ')}) va ${brokenLessons.length + bloatedLessons.length} ta buzilgan dars o'chadi.`
+                      : t('Barcha tuzilgan jadvallar o\'chadi!')}
               </b>
               <p className="mt-1 text-xs">{t('Bu amalni bekor qilib bo\'lmaydi.')}</p>
             </div>

@@ -15,12 +15,14 @@ import { generateDirect } from '@/features/cloud/api'
 import { countHardViolations, timetableGaps } from '@/features/_shared/compute'
 import { validateProject } from '@/engine/validate'
 import { useExpiry } from '@/features/pro/useExpiry'
+import { isInvalidClassName } from '@/io/importTaqsimot'
 
 export function DistributionPage() {
   const project = useProject((s) => s.project)
   const addTimetable = useProject((s) => s.addTimetable)
   const removeTimetable = useProject((s) => s.removeTimetable)
   const updateTimetable = useProject((s) => s.updateTimetable)
+  const setProject = useProject((s) => s.setProject)
   const toast = useToast()
   const { running, progress, message, run, runImprove, stop } = useGenerator()
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -39,6 +41,36 @@ export function DistributionPage() {
 
   const generate = () => {
     if (lessons.length === 0) return toast.error('Avval darslarni kiriting')
+    // Avval buzilgan ma'lumotlarni tekshiramiz: avvalgi bug'li importdan qolgan
+    // "#", "Xona", "№" kabi noma'qul sinflar yoki haddan tashqari ko'p soatli darslar (>50)
+    const invalidClasses = project.classes.filter(c => isInvalidClassName(c.name) || isInvalidClassName(c.short || ''))
+    const invalidClassIds = new Set(invalidClasses.map(c => c.id))
+    const brokenLessons = project.lessons.filter(l => l.classIds.some(id => invalidClassIds.has(id)))
+    const bloatedLessons = project.lessons.filter(l => l.hoursPerWeek > 50)
+    if (invalidClasses.length > 0 || bloatedLessons.length > 0) {
+      const parts: string[] = []
+      if (invalidClasses.length > 0) {
+        parts.push(`${invalidClasses.length} ta noma'qul sinf (${invalidClasses.map(c => c.name).slice(0, 3).join(', ')}${invalidClasses.length > 3 ? '...' : ''})`)
+      }
+      if (bloatedLessons.length > 0) {
+        parts.push(`${bloatedLessons.length} ta buzilgan dars (50+ soat)`)
+      }
+      const msg =
+        `Loyihada buzilgan ma'lumot aniqlandi:\n\n• ` + parts.join('\n• ') +
+        `\n\nBular avvalgi import xatosidan qolgan. Avtomatik tozalab, jadval tuzamizmi?\n\n` +
+        `OK = tozalab davom etish  |  Bekor = o'zim tuzataman`
+      if (!confirm(msg)) return
+      // Avtomatik tozalash
+      const nextClasses = project.classes.filter(c => !invalidClassIds.has(c.id))
+      const nextLessons = project.lessons.filter(l =>
+        !l.classIds.some(id => invalidClassIds.has(id)) && l.hoursPerWeek <= 50
+      )
+      setProject({ ...project, classes: nextClasses, lessons: nextLessons })
+      toast.success(`${invalidClasses.length} sinf, ${brokenLessons.length + bloatedLessons.length} dars tozalandi — jadval tuzish davom etmoqda`)
+      // setProject asinxron — bir soniya kutib, qayta chaqiramiz
+      setTimeout(() => generate(), 100)
+      return
+    }
     // Pre-flight: loyihani tekshiramiz
     const check = validateProject(project)
     if (check.willFail) {

@@ -148,7 +148,8 @@ interface AuthState {
   resetAccountPassword: (id: string, newPassword: string) => Promise<string | null>
   accountLogin: (role: 'teacher' | 'student', login: string, password: string) => Promise<string | null>
 
-  /** Yangi mijoz yozuvi (admin lokal eslatma: login, parol, telefon va h.k.) — litsenziyasiz */
+  /** Yangi mijoz yozuvi (admin lokal eslatma: login, parol, telefon va h.k.) — litsenziyasiz.
+   *  Login band bo'lsa — xato xabari qaytaradi, aks holda null. */
   addCustomer: (opts: {
     schoolName: string
     director: string
@@ -158,13 +159,14 @@ interface AuthState {
     notes?: string
     plan?: string
     key?: string
-  }) => void
+  }) => string | null
   /** Admin shu qurilmada direktor hisobini SOZLAYDI (yoki qayta yozadi) —
    *  shu bilan admin o'z qurilmasida ham testlab ko'ra oladi (chiqib → Zavuch login).
    *  Haqiqiy mijoz boshqa qurilmada login+parolni Zavuch panelida ro'yxatdan o'tishi kerak. */
   provisionDirectorHere: (login: string, password: string) => Promise<string | null>
-  /** Mavjud mijoz yozuvini yangilash (shu jumladan admin bergan login/parol) */
-  updateCustomer: (id: string, patch: Partial<SchoolRecord>) => void
+  /** Mavjud mijoz yozuvini yangilash (shu jumladan admin bergan login/parol).
+   *  Agar login boshqa mijozda band bo'lsa — xato xabari qaytaradi. */
+  updateCustomer: (id: string, patch: Partial<SchoolRecord>) => string | null
   setSchoolBlocked: (id: string, blocked: boolean) => void
   removeSchool: (id: string) => void
   setOwnerContact: (patch: Partial<{ telegram: string; phone: string }>) => void
@@ -333,6 +335,10 @@ export const useAuth = create<AuthState>()(
         if (!newLogin.trim()) return 'Login kiriting'
         if (newPassword !== undefined && newPassword.length > 0 && newPassword.length < 4)
           return "Yangi parol kamida 4 belgi bo'lsin"
+        // Yangi login mijozlar bilan takrorlanmasin
+        const trimmed = newLogin.trim()
+        if (get().schools.some((x) => sameLogin(x.login || '', trimmed)))
+          return `Bu login band — "${trimmed}" mijozlar ro'yxatida bor`
 
         const effectivePassword = newPassword || currentPassword
         const cred = await makeCred(newLogin, effectivePassword)
@@ -606,8 +612,17 @@ export const useAuth = create<AuthState>()(
       removeSchool: (id) => set((s) => ({ schools: s.schools.filter((x) => x.licenseId !== id) })),
 
       /** Yangi mijoz yozuvi — litsenziya kaliti yaratilmaydi, faqat admin lokal eslatma.
-       *  Pro kaliti (ixtiyoriy) `key` orqali uzatiladi — mijoz Sozlamalar'da aktivlashtiradi. */
+       *  Pro kaliti (ixtiyoriy) `key` orqali uzatiladi — mijoz Sozlamalar'da aktivlashtiradi.
+       *  Login band bo'lsa (boshqa mijozda yoki admin hisobida) — xato qaytaradi. */
       addCustomer: ({ schoolName, director, phone, login, password, notes, plan, key }) => {
+        const loginTrim = (login || '').trim()
+        if (!loginTrim) return 'Login kiriting'
+        // Boshqa mijoz bilan takrorlanmasin
+        if (get().schools.some((x) => sameLogin(x.login || '', loginTrim)))
+          return `Bu login band — "${loginTrim}" boshqa mijozga berilgan`
+        // Admin hisobi bilan takrorlanmasin
+        if (get().ownerAuth && sameLogin(get().ownerAuth!.login, loginTrim))
+          return 'Bu login admin hisobida ishlatilgan — boshqa login tanlang'
         const now = new Date()
         const rec: SchoolRecord = {
           licenseId: uid('CUS_'),
@@ -620,19 +635,35 @@ export const useAuth = create<AuthState>()(
           expiresAt: now.toISOString(),
           key: key || '',
           blocked: false,
-          login,
+          login: loginTrim,
           password,
           notes,
         }
         set((s) => ({ schools: [rec, ...s.schools] }))
-        get().logAudit('customer:add', `${schoolName} / ${login}`)
+        get().logAudit('customer:add', `${schoolName} / ${loginTrim}`)
+        return null
       },
-      updateCustomer: (id, patch) =>
-        set((s) => ({ schools: s.schools.map((x) => (x.licenseId === id ? { ...x, ...patch } : x)) })),
+      updateCustomer: (id, patch) => {
+        // Login o'zgartirilayotgan bo'lsa — boshqa mijoz bilan takrorlanmasligini tekshiramiz
+        if (patch.login !== undefined) {
+          const loginTrim = (patch.login || '').trim()
+          if (!loginTrim) return 'Login kiriting'
+          const dup = get().schools.find(
+            (x) => x.licenseId !== id && sameLogin(x.login || '', loginTrim),
+          )
+          if (dup) return `Bu login band — "${loginTrim}" boshqa mijozga berilgan (${dup.schoolName})`
+          if (get().ownerAuth && sameLogin(get().ownerAuth!.login, loginTrim))
+            return 'Bu login admin hisobida ishlatilgan — boshqa login tanlang'
+          patch = { ...patch, login: loginTrim }
+        }
+        set((s) => ({ schools: s.schools.map((x) => (x.licenseId === id ? { ...x, ...patch } : x)) }))
+        return null
+      },
 
       /** Admin qurilmasida direktor hisobini sozlash/qayta yozish.
        *  OwnerPanel'dan chaqiriladi: admin yangi mijoz qo'shsa yoki tahrirlasa —
-       *  shu login/parol bilan DARHOL Zavuch rejimida kirib testlab ko'rishi mumkin. */
+       *  shu login/parol bilan Zavuch rejimida kirib testlab ko'rishi mumkin
+       *  (admin chiqib → Zavuch login qilgandagina scope o'tadi). */
       provisionDirectorHere: async (login, password) => {
         if (!login.trim()) return 'Login kiriting'
         if (password.length < 4) return "Parol kamida 4 belgi bo'lsin"
@@ -645,7 +676,8 @@ export const useAuth = create<AuthState>()(
         }
         set((s) => ({ staff: { ...s.staff, director: rec } }))
         get().logAudit('customer:provision-director', login)
-        await useProject.getState().switchScope(`staff:${login.toLowerCase().trim()}`)
+        // MUHIM: scope O'ZGARTIRILMAYDI. Admin o'z _owner_ scope'ida qoladi,
+        // aks holda admin bu yerda tuzgan jadval mijoz Zavuchining fayliga tushib qoladi.
         return null
       },
       setOwnerContact: (patch) => set((s) => ({ ownerContact: { ...s.ownerContact, ...patch } })),

@@ -95,11 +95,14 @@ export function OwnerPanel() {
     // Pro tanlangan va kalit yo'q bo'lsa — avto-generatsiya
     const key = plan === 'Pro' ? (proKey.trim() || generateProKey()) : ''
     const expiry = plan === 'Pro' && expiresAt ? new Date(expiresAt).toISOString() : undefined
+    const isNew = !editId
     if (editId) {
-      updateCustomer(editId, { schoolName, director, phone, login, password, notes, plan, key, ...(expiry ? { expiresAt: expiry } : {}) })
+      const err = updateCustomer(editId, { schoolName, director, phone, login, password, notes, plan, key, ...(expiry ? { expiresAt: expiry } : {}) })
+      if (err) return toast.error(err)
       toast.success('Mijoz yangilandi')
     } else {
-      addCustomer({ schoolName, director, phone, login, password, notes, plan, key })
+      const err = addCustomer({ schoolName, director, phone, login, password, notes, plan, key })
+      if (err) return toast.error(err)
       // Pro muddatini belgilash (yangi mijoz)
       if (expiry) {
         const latest = useAuth.getState().schools
@@ -108,10 +111,15 @@ export function OwnerPanel() {
       toast.success(plan === 'Pro' ? `Yangi Pro mijoz saqlandi. Kalit: ${key}` : 'Yangi mijoz saqlandi')
     }
     // MUHIM: shu qurilmada direktor hisobini ham sozlab beramiz —
-    // admin chiqib → Zavuch bo'lib kirib testlab ko'ra oladi
-    const err = await provisionDirectorHere(login, password)
-    if (err) {
-      toast.error('Direktor hisobini sozlashda xato: ' + err)
+    // admin chiqib → Zavuch bo'lib kirib testlab ko'ra oladi (scope o'zgartirmaydi).
+    const perr = await provisionDirectorHere(login, password)
+    if (perr) {
+      toast.error('Direktor hisobini sozlashda xato: ' + perr)
+    }
+    // Yangi mijoz uchun — scope'ini tozalaymiz. Shu bilan admin'ning avvalgi
+    // "oqib ketgan" ma'lumotlari (sinflar/o'qituvchilar/fanlar) bu mijozga ko'rinmaydi.
+    if (isNew) {
+      await useProject.getState().resetScope(`staff:${login.toLowerCase().trim()}`)
     }
     reset()
     setOpen(false)
@@ -406,6 +414,21 @@ export function OwnerPanel() {
                     title="Shu login/parol bilan Zavuch panelida testlab ko'rish"
                   >
                     <LogIn size={13} /> Sinab ko'rish
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!s.login) {
+                        toast.error('Login topilmadi')
+                        return
+                      }
+                      if (!confirm(`${s.schoolName} mijoziga tegishli barcha jadval ma'lumotlari (sinflar, o'qituvchilar, fanlar, darslar) shu qurilmadan o'chiriladi. Bu amal faqat shu qurilmada ta'sir qiladi, mijozning o'z qurilmasidagi ma'lumotlariga tegmaydi. Davom etasizmi?`)) return
+                      await useProject.getState().resetScope(`staff:${s.login.toLowerCase().trim()}`)
+                      toast.success(`${s.schoolName} ma'lumotlari tozalandi`)
+                    }}
+                    className="btn btn-outline hover-lift h-8 px-2 text-xs text-amber-600 border-amber-500/40 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                    title="Shu mijoz scope'idagi barcha jadval ma'lumotlarini tozalash (admin'ning avvalgi bug'li ma'lumotlarini olib tashlash uchun)"
+                  >
+                    <Eraser size={13} />
                   </button>
                   <button
                     onClick={() => openForEdit(s.licenseId)}

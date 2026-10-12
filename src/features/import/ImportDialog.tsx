@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { FileSpreadsheet, Download, Upload, Check, Wand2 } from 'lucide-react'
+import { FileSpreadsheet, Download, Upload, Check, Wand2, Eye, EyeOff } from 'lucide-react'
 import { Modal } from '@/components/Modal'
 import { useProject } from '@/store/project'
 import { useToast } from '@/store/toast'
@@ -11,6 +11,7 @@ import {
   applyImport,
   downloadSample,
   pickBestSheet,
+  toggleClassCol,
   type SheetData,
   type Mapping,
   type Parsed,
@@ -30,6 +31,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
   const [parsed, setParsed] = useState<Parsed | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [showRaw, setShowRaw] = useState(false)
 
   const reset = () => {
     setStep('ask')
@@ -69,7 +71,10 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
       setFileName(file.name)
       const m = autoDetect(sh[idx].rows)
       setMapping(m)
-      setParsed(buildParsed(sh[idx].rows, m))
+      const p = buildParsed(sh[idx].rows, m)
+      setParsed(p)
+      // Hech narsa aniqlanmasa — xom ma'lumotlarni darhol ko'rsatamiz
+      if (p.rows.length === 0) setShowRaw(true)
       setStep('preview')
     } catch (e) {
       setError((e as Error).message || "Faylni o'qib bo'lmadi")
@@ -91,21 +96,42 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
     applyMapping(sheetIdx, m)
   }
 
+  const toggleCol = (col: number) => {
+    if (!mapping) return
+    const m = toggleClassCol(mapping, col)
+    applyMapping(sheetIdx, m)
+  }
+
   const doImport = () => {
     if (!parsed) return
     if (parsed.rows.length === 0) {
-      setError("Hech qanday dars topilmadi — ustunlarni to'g'rilang")
+      setError("Hech qanday dars topilmadi — pastdagi \"Sinf ustunlari\" bo'limida sinflarni qo'lda belgilang yoki \"Fayl mazmuni\" ni ko'rib ustunlarni to'g'rilang")
+      setShowRaw(true)
       return
     }
     const { project: next, summary } = applyImport(parsed, project)
     setProject(next)
-    toast.success(
-      `Import: +${summary.classes} sinf, +${summary.subjects} fan, +${summary.teachers} o'qituvchi, +${summary.lessons} dars`,
-    )
+    const parts: string[] = []
+    if (summary.classes > 0) parts.push(`+${summary.classes} sinf`)
+    if (summary.subjects > 0) parts.push(`+${summary.subjects} fan`)
+    if (summary.teachers > 0) parts.push(`+${summary.teachers} o'qituvchi`)
+    if (summary.lessons > 0) parts.push(`+${summary.lessons} yangi dars`)
+    if (summary.updated > 0) parts.push(`${summary.updated} dars yangilandi`)
+    if (parts.length === 0) {
+      toast.info(`Hamma ma'lumot allaqachon mavjud (${summary.hours} soat tekshirildi) — hech narsa o'zgarmadi`)
+    } else {
+      toast.success('Import: ' + parts.join(', '))
+    }
     close()
   }
 
   const colOptions = header.map((h, i) => ({ i, label: `${colLetter(i)} — ${h || '(bo‘sh)'}` }))
+
+  // Barcha ustunlarning umumiy soni (sarlavha + ma'lumot qatorlaridan maksimum)
+  const totalCols = Math.max(
+    header.length,
+    ...rows.slice(mapping?.headerRow ?? 0, (mapping?.headerRow ?? 0) + 20).map((r) => r?.length ?? 0),
+  )
 
   return (
     <Modal
@@ -219,6 +245,111 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
                   ))}
                 </select>
               </label>
+            </div>
+          )}
+
+          {/* Sinf ustunlari — qo'lda belgilash */}
+          {mapping && (
+            <div className="rounded-lg border border-border bg-surface-2 p-2 text-xs">
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="font-semibold">Sinf ustunlari</span>
+                <button
+                  onClick={() => setShowRaw((v) => !v)}
+                  className="btn btn-outline h-6 px-2 text-[11px]"
+                >
+                  {showRaw ? <EyeOff size={12} /> : <Eye size={12} />}
+                  {showRaw ? 'Fayl mazmunini yashirish' : 'Fayl mazmunini ko‘rish'}
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {Array.from({ length: totalCols }, (_, i) => i)
+                  .filter((i) => i !== mapping.teacherCol && i !== mapping.subjectCol)
+                  .map((i) => {
+                    const h = header[i] || ''
+                    const active = mapping.classCols.includes(i)
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => toggleCol(i)}
+                        className={`rounded border px-2 py-0.5 text-[11px] transition ${
+                          active
+                            ? 'border-accent bg-accent/15 text-accent'
+                            : 'border-border bg-surface text-muted hover:text-text'
+                        }`}
+                        title={active ? 'Sinf ustuni (bosib o‘chirish)' : 'Sinf emas (bosib qo‘shish)'}
+                      >
+                        {active ? '☑ ' : '☐ '}
+                        <span className="font-mono">{colLetter(i)}</span>
+                        {h && <span className="ml-1">— {h.length > 12 ? h.slice(0, 12) + '…' : h}</span>}
+                      </button>
+                    )
+                  })}
+              </div>
+              {mapping.classCols.length === 0 && (
+                <p className="mt-1.5 text-[11px] text-danger">
+                  Hech qanday sinf ustuni belgilanmagan — yuqoridagi ustunlardan sinflarni tanlang
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Fayl mazmuni — xom qatorlar (ustunlarni to'g'rilash uchun) */}
+          {showRaw && (
+            <div className="max-h-[25vh] overflow-auto rounded-lg border border-border">
+              <table className="w-full border-collapse text-[11px]">
+                <thead className="sticky top-0 bg-surface-2">
+                  <tr>
+                    <th className="border-b border-border px-1.5 py-1 text-center font-mono text-muted">#</th>
+                    {Array.from({ length: totalCols }, (_, i) => {
+                      const role = i === mapping?.teacherCol
+                        ? 'O\'q.'
+                        : i === mapping?.subjectCol
+                        ? 'Fan'
+                        : mapping?.classCols.includes(i)
+                        ? 'Sinf'
+                        : ''
+                      return (
+                        <th
+                          key={i}
+                          className={`border-b border-l border-border px-1.5 py-1 text-center font-mono ${
+                            role === 'Sinf' ? 'bg-accent/10 text-accent' : role ? 'bg-primary/10 text-primary' : 'text-muted'
+                          }`}
+                        >
+                          {colLetter(i)}
+                          {role && <div className="text-[9px] font-sans">{role}</div>}
+                        </th>
+                      )
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.slice(0, 15).map((r, i) => (
+                    <tr
+                      key={i}
+                      className={`${
+                        i === mapping?.headerRow ? 'bg-primary/5 font-semibold' : 'odd:bg-surface even:bg-surface-2/40'
+                      }`}
+                    >
+                      <td className="border-b border-border/60 px-1.5 py-0.5 text-center font-mono text-muted">
+                        {i + 1}
+                      </td>
+                      {Array.from({ length: totalCols }, (_, c) => (
+                        <td
+                          key={c}
+                          className={`border-b border-l border-border/60 px-1.5 py-0.5 ${
+                            mapping?.classCols.includes(c) ? 'bg-accent/5' : ''
+                          }`}
+                        >
+                          {r[c] || ''}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {rows.length > 15 && (
+                <p className="bg-surface-2 px-2 py-1 text-center text-[10px] text-muted">… va yana {rows.length - 15} qator</p>
+              )}
             </div>
           )}
 
