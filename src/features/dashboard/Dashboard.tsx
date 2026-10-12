@@ -5,7 +5,6 @@ import {
   GraduationCap,
   CalendarDays,
   LayoutGrid,
-  Sparkles,
   ArrowRight,
   CheckCircle2,
   AlertTriangle,
@@ -18,7 +17,6 @@ import { useUI } from '@/store/ui'
 import { useProject } from '@/store/project'
 import { useAuth } from '@/store/auth'
 import { useToast } from '@/store/toast'
-import { buildDemoProject } from '@/data/seed'
 import { useT } from '@/i18n'
 import { saveProjectToFile, openProjectFromFile } from '@/io/projectFile'
 import type { LucideIcon } from 'lucide-react'
@@ -39,11 +37,6 @@ export function Dashboard() {
     { id: 'teachers', label: "O'qituvchilar", icon: GraduationCap, value: project.teachers.length, color: '#a855f7' },
     { id: 'lessons', label: 'Darslar', icon: CalendarDays, value: project.lessons.length, color: '#ec4899' },
   ]
-
-  const loadDemo = () => {
-    setProject(buildDemoProject())
-    toast.success(t("Namuna ma'lumotlar yuklandi"))
-  }
 
   const doSave = () => {
     saveProjectToFile(project)
@@ -69,8 +62,6 @@ export function Dashboard() {
     (a, l) => a + l.hoursPerWeek * Math.max(1, l.classIds.length),
     0,
   )
-  const empty = project.classes.length === 0 || project.subjects.length === 0
-
   // Ma'lumotlar to'liqlik tekshiruvi
   const checks = [
     { label: t('Maktab sozlangan'), ok: !!project.school.name && project.school.workDays > 0 },
@@ -97,11 +88,6 @@ export function Dashboard() {
               : t('JadvalPro — maktab dars jadvalini avtomatik tuzuvchi dastur.')}
           </p>
         </div>
-        {empty && (
-          <button onClick={loadDemo} className="btn btn-outline hover-lift">
-            <Sparkles size={16} /> {t("Namuna ma'lumot yuklash")}
-          </button>
-        )}
       </div>
 
       {/* Metric cards */}

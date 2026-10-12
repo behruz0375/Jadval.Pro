@@ -319,9 +319,9 @@ export const useAuth = create<AuthState>()(
           const enc = await encryptJsonWithPassword(priv, password)
           set({ ownerKeys: { publicJwk: keys.publicJwk }, ownerKeysEnc: enc })
         }
+        await useProject.getState().switchScope('_owner_')
         set({ ownerPrivateJwk: priv, role: 'owner' })
         get().logAudit('Egasi kirdi', auth.login || 'egasi')
-        void useProject.getState().switchScope('_owner_')
         return null
       },
 
@@ -456,10 +456,10 @@ export const useAuth = create<AuthState>()(
         recordOk(lkey)
         if (res.upgraded)
           set((s) => ({ staff: { ...s.staff, [role]: { ...cred, ...res.upgraded } } }))
+        const dirLogin = (role === 'director' ? cred.login : get().staff.director?.login) || 'staff'
+        await useProject.getState().switchScope(`staff:${dirLogin.toLowerCase().trim()}`)
         set({ role })
         get().logAudit('Kirish', (role === 'director' ? 'Zavuch' : "O'TIBDO'") + ': ' + login)
-        const dirLogin = (role === 'director' ? cred.login : get().staff.director?.login) || 'staff'
-        void useProject.getState().switchScope(`staff:${dirLogin.toLowerCase().trim()}`)
         return null
       },
 
@@ -594,10 +594,10 @@ export const useAuth = create<AuthState>()(
         recordOk(akey)
         if (res.upgraded)
           set((s) => ({ accounts: s.accounts.map((a) => (a.id === acc.id ? { ...a, ...res.upgraded } : a)) }))
+        const dirLogin = get().staff.director?.login || 'staff'
+        await useProject.getState().switchScope(`staff:${dirLogin.toLowerCase().trim()}`)
         set({ role, linkedId: acc.linkedId })
         get().logAudit('Kirish', (role === 'teacher' ? "O'qituvchi" : "O'quvchi") + ': ' + login)
-        const dirLogin = get().staff.director?.login || 'staff'
-        void useProject.getState().switchScope(`staff:${dirLogin.toLowerCase().trim()}`)
         return null
       },
 
@@ -645,7 +645,7 @@ export const useAuth = create<AuthState>()(
         }
         set((s) => ({ staff: { ...s.staff, director: rec } }))
         get().logAudit('customer:provision-director', login)
-        void useProject.getState().switchScope(`staff:${login.toLowerCase().trim()}`)
+        await useProject.getState().switchScope(`staff:${login.toLowerCase().trim()}`)
         return null
       },
       setOwnerContact: (patch) => set((s) => ({ ownerContact: { ...s.ownerContact, ...patch } })),

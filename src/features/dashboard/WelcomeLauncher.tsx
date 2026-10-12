@@ -1,9 +1,8 @@
-import { FilePlus2, FolderOpen, ArrowRightCircle, Sparkles, KeyRound, X } from 'lucide-react'
+import { FilePlus2, FolderOpen, ArrowRightCircle, KeyRound, X } from 'lucide-react'
 import { useProject } from '@/store/project'
 import { useUI } from '@/store/ui'
 import { useAuth } from '@/store/auth'
 import { useToast } from '@/store/toast'
-import { buildDemoProject } from '@/data/seed'
 import { openProjectFromFile } from '@/io/projectFile'
 import { useT } from '@/i18n'
 import type { LucideIcon } from 'lucide-react'
@@ -36,12 +35,6 @@ export function WelcomeLauncher({ onClose }: { onClose: () => void }) {
       toast.error((e as Error).message)
     }
   }
-  const doDemo = () => {
-    newProject()
-    setProject(buildDemoProject())
-    toast.success(t("Namuna ma'lumotlar yuklandi"))
-    onClose()
-  }
   const doLicense = () => {
     setActivePanel(role === 'owner' ? 'owner' : 'license')
     onClose()
@@ -51,7 +44,6 @@ export function WelcomeLauncher({ onClose }: { onClose: () => void }) {
     { icon: FilePlus2, title: t('Yangi jadval yaratish'), desc: t("Bo'sh loyihadan boshlash"), color: '#4457d6', onClick: doNew, primary: true },
     { icon: FolderOpen, title: t('Saqlangan jadvalni ochish'), desc: t('.jadval faylni yuklash'), color: '#f97316', onClick: doOpen },
     { icon: ArrowRightCircle, title: t('Oxirgi bilan davom etish'), desc: t('Joriy loyihani davom ettirish'), color: '#22c55e', onClick: onClose },
-    { icon: Sparkles, title: t("Namuna ma'lumot"), desc: t('Sinov uchun tayyor maktab'), color: '#a855f7', onClick: doDemo },
     { icon: KeyRound, title: role === 'owner' ? t('Boshqaruv paneli') : t("Dastur ma'lumoti"), desc: role === 'owner' ? t('Mijozlar va login/parollar') : t('Dastur va aloqa'), color: '#14b8a6', onClick: doLicense },
   ]
 
