@@ -16,6 +16,7 @@ import {
   type EncryptedBlob,
 } from '@/security/crypto'
 import { uid } from '@/utils'
+import { useProject } from './project'
 
 /** Hisob ma'lumotlari (login + PBKDF2 parol hashi) */
 export interface Cred {
@@ -246,7 +247,17 @@ export const useAuth = create<AuthState>()(
         set({ machineCode, ready: true })
       },
 
-      logout: () => set({ role: null, ownerPrivateJwk: null, linkedId: null }),
+      logout: () => {
+        const ps = useProject.getState()
+        const scope = ps.scope
+        if (scope && scope !== '_default_') {
+          void idbStorage.setItem(
+            `jadvalpro-project-scope:${scope}`,
+            JSON.stringify({ state: { project: ps.project } }),
+          )
+        }
+        set({ role: null, ownerPrivateJwk: null, linkedId: null })
+      },
 
       // ---------------- Egasi hisobi ----------------
 
@@ -310,6 +321,7 @@ export const useAuth = create<AuthState>()(
         }
         set({ ownerPrivateJwk: priv, role: 'owner' })
         get().logAudit('Egasi kirdi', auth.login || 'egasi')
+        void useProject.getState().switchScope('_owner_')
         return null
       },
 
@@ -446,6 +458,8 @@ export const useAuth = create<AuthState>()(
           set((s) => ({ staff: { ...s.staff, [role]: { ...cred, ...res.upgraded } } }))
         set({ role })
         get().logAudit('Kirish', (role === 'director' ? 'Zavuch' : "O'TIBDO'") + ': ' + login)
+        const dirLogin = (role === 'director' ? cred.login : get().staff.director?.login) || 'staff'
+        void useProject.getState().switchScope(`staff:${dirLogin.toLowerCase().trim()}`)
         return null
       },
 
@@ -582,6 +596,8 @@ export const useAuth = create<AuthState>()(
           set((s) => ({ accounts: s.accounts.map((a) => (a.id === acc.id ? { ...a, ...res.upgraded } : a)) }))
         set({ role, linkedId: acc.linkedId })
         get().logAudit('Kirish', (role === 'teacher' ? "O'qituvchi" : "O'quvchi") + ': ' + login)
+        const dirLogin = get().staff.director?.login || 'staff'
+        void useProject.getState().switchScope(`staff:${dirLogin.toLowerCase().trim()}`)
         return null
       },
 
@@ -629,6 +645,7 @@ export const useAuth = create<AuthState>()(
         }
         set((s) => ({ staff: { ...s.staff, director: rec } }))
         get().logAudit('customer:provision-director', login)
+        void useProject.getState().switchScope(`staff:${login.toLowerCase().trim()}`)
         return null
       },
       setOwnerContact: (patch) => set((s) => ({ ownerContact: { ...s.ownerContact, ...patch } })),

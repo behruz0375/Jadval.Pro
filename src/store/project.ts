@@ -20,11 +20,13 @@ type Entity = 'classes' | 'subjects' | 'rooms' | 'teachers' | 'lessons'
 interface ProjectState {
   project: Project
   dirty: boolean
+  scope: string
 
   // Umumiy
   setProject: (p: Project) => void
   newProject: () => void
   markSaved: () => void
+  switchScope: (newScope: string) => Promise<void>
 
   // Maktab
   updateSchool: (patch: Partial<School>) => void
@@ -66,7 +68,7 @@ interface ProjectState {
 
 export const useProject = create<ProjectState>()(
   persist(
-    (set) => {
+    (set, get) => {
       const touch = (p: Partial<Project>) => (state: ProjectState) => ({
         project: { ...state.project, ...p },
         dirty: true,
@@ -75,9 +77,43 @@ export const useProject = create<ProjectState>()(
       return {
         project: defaultProject(),
         dirty: false,
+        scope: '_default_',
 
         setProject: (project) => set({ project, dirty: false }),
         newProject: () => set({ project: defaultProject(), dirty: false }),
+        switchScope: async (newScope: string) => {
+          const state = get()
+          const oldScope = state.scope
+          if (oldScope === newScope) return
+          if (oldScope && oldScope !== '_default_') {
+            await idbStorage.setItem(
+              `jadvalpro-project-scope:${oldScope}`,
+              JSON.stringify({ state: { project: state.project } }),
+            )
+          }
+          const stored = await idbStorage.getItem(`jadvalpro-project-scope:${newScope}`)
+          let project: Project
+          if (stored) {
+            try {
+              const parsed = JSON.parse(stored as string)
+              project = parsed?.state?.project ?? defaultProject()
+              if (project.teachers) {
+                project.teachers = project.teachers.map((t: any) => {
+                  if (!Array.isArray(t.methodicalDays)) {
+                    t.methodicalDays = t.methodicalDay != null && t.methodicalDay >= 0 ? [t.methodicalDay] : []
+                    delete t.methodicalDay
+                  }
+                  return t
+                })
+              }
+            } catch {
+              project = defaultProject()
+            }
+          } else {
+            project = defaultProject()
+          }
+          set({ project, scope: newScope, dirty: false })
+        },
         markSaved: () =>
           set((s) => ({
             dirty: false,
@@ -192,7 +228,7 @@ export const useProject = create<ProjectState>()(
     {
       name: 'jadvalpro-project',
       storage: createJSONStorage(() => idbStorage),
-      partialize: (s) => ({ project: s.project }),
+      partialize: (s) => ({ project: s.project, scope: s.scope }),
       merge: (persisted, current) => {
         const s = persisted as { project?: Project }
         if (s?.project?.teachers) {
