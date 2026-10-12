@@ -85,13 +85,20 @@ export const useProject = create<ProjectState>()(
           const state = get()
           const oldScope = state.scope
           if (oldScope === newScope) return
-          if (oldScope && oldScope !== '_default_') {
+          if (oldScope) {
             await idbStorage.setItem(
               `jadvalpro-project-scope:${oldScope}`,
               JSON.stringify({ state: { project: state.project } }),
             )
           }
-          const stored = await idbStorage.getItem(`jadvalpro-project-scope:${newScope}`)
+          let stored = await idbStorage.getItem(`jadvalpro-project-scope:${newScope}`)
+          if (!stored && newScope !== '_default_') {
+            const fallback = await idbStorage.getItem('jadvalpro-project-scope:_default_')
+            if (fallback) {
+              stored = fallback
+              await idbStorage.removeItem('jadvalpro-project-scope:_default_')
+            }
+          }
           let project: Project
           if (stored) {
             try {

@@ -250,7 +250,7 @@ export const useAuth = create<AuthState>()(
       logout: () => {
         const ps = useProject.getState()
         const scope = ps.scope
-        if (scope && scope !== '_default_') {
+        if (scope) {
           void idbStorage.setItem(
             `jadvalpro-project-scope:${scope}`,
             JSON.stringify({ state: { project: ps.project } }),
