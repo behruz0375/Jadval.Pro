@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Menu, Minus, Square, X, LogOut, Search, Send, Save, Cloud, CloudOff, AlertTriangle, Clock } from 'lucide-react'
+import { Menu, Minus, Square, X, LogOut, Search, Send, Save, Cloud, CloudOff, AlertTriangle, Clock, Home } from 'lucide-react'
+import { WelcomeLauncher } from '@/features/dashboard/WelcomeLauncher'
 import { useUI } from '@/store/ui'
 import { useAuth } from '@/store/auth'
 import { useProject } from '@/store/project'
@@ -29,6 +30,8 @@ export function TopBar() {
   const savedAt = useProject((s) => s.project.meta?.savedAt)
   const toast = useToast()
   const t = useT()
+
+  const [welcomeOpen, setWelcomeOpen] = useState(false)
 
   // Oxirgi saqlangandan beri necha daqiqa — har 30s'da yangilash
   const [tick, setTick] = useState(0)
@@ -142,6 +145,18 @@ export function TopBar() {
         <span className="hidden text-sm font-semibold sm:inline">{t('Bosh menyu')}</span>
       </button>
 
+      {/* Boshlang'ich oyna — Yangi/Ochish/Namuna/Davom etish */}
+      {role !== 'teacher' && role !== 'student' && role !== 'owner' && (
+        <button
+          onClick={() => setWelcomeOpen(true)}
+          className="btn btn-ghost h-9 px-2 text-accent"
+          title={t("Boshlang'ich oyna — Yangi, Ochish, Namuna")}
+        >
+          <Home size={16} />
+          <span className="hidden text-sm font-semibold md:inline">{t("Boshlang'ich")}</span>
+        </button>
+      )}
+
       <div className="mx-1 hidden h-5 w-px bg-border sm:mx-2 sm:block" />
 
       <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
@@ -235,6 +250,7 @@ export function TopBar() {
         </div>
       </div>
     </header>
+    {welcomeOpen && <WelcomeLauncher onClose={() => setWelcomeOpen(false)} />}
     </>
   )
 }

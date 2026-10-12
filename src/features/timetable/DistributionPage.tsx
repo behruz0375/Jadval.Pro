@@ -202,7 +202,7 @@ export function DistributionPage() {
           className="btn btn-outline hover-lift ml-auto h-9"
           title="Yangi jadval, saqlangan jadvalni ochish yoki namuna yuklash"
         >
-          <Home size={15} /> <span className="hidden sm:inline">Boshlash</span>
+          <Home size={15} /> <span className="hidden sm:inline">Boshlang'ich oyna</span>
         </button>
         <button onClick={() => setImportOpen(true)} className="btn btn-outline hover-lift h-9" title="Excel taqsimotdan ma'lumot qo’shish (namuna fayl bilan)">
           <FileSpreadsheet size={15} /> <span className="hidden sm:inline">Excel import</span>
