@@ -45,11 +45,11 @@ export async function exportDataToExcel(project: Project) {
 
   // O'qituvchilar
   add(XLSX, wb,"O'qituvchilar", [
-    ['#', 'F.I.Sh.', 'Metodik kun', 'Kunlik sig\'im', 'Haftalik norma'],
+    ['#', 'F.I.Sh.', 'Metodik kunlar', 'Kunlik sig\'im', 'Haftalik norma'],
     ...teachers.map((t, i) => [
       i + 1,
       t.fullName,
-      t.methodicalDay >= 0 ? DAYS_UZ[t.methodicalDay] : '—',
+      t.methodicalDays.length ? t.methodicalDays.map((d) => DAYS_UZ[d]).join(', ') : '—',
       t.dailyCapacity,
       t.weeklyMax,
     ]),

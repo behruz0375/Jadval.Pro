@@ -56,9 +56,18 @@ function mergeWithDefaults(p: Partial<Project>): Project {
     classes: p.classes ?? [],
     subjects: p.subjects ?? [],
     rooms: p.rooms ?? [],
-    teachers: p.teachers ?? [],
+    teachers: (p.teachers ?? []).map(migrateTeacher),
     lessons: p.lessons ?? [],
     timetables: p.timetables ?? [],
     settings: { ...base.settings, ...(p.settings ?? {}) },
   }
+}
+
+function migrateTeacher(t: any): any {
+  if (!Array.isArray(t.methodicalDays)) {
+    const old = t.methodicalDay as number | undefined
+    t.methodicalDays = old != null && old >= 0 ? [old] : []
+  }
+  delete t.methodicalDay
+  return t
 }

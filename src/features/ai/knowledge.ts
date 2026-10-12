@@ -147,7 +147,7 @@ export const KNOWLEDGE_BASE: KBEntry[] = [
     id: 'methodical-day',
     keywords: ['metodik', 'metodicheskiy', 'dam kun', 'metodik kun'],
     question: "Metodik kun nima?",
-    answer: "Metodik kun — o'qituvchi dars bermay, tayyorgarlik va malaka oshirish bilan shug'ullanadigan kun. Bu kunda algoritm o'qituvchiga dars joylashmaydi. O'qituvchi sahifasida yoki menga \"Aliyev metodik kun — chorshanba\" deb belgilang.",
+    answer: "Metodik kun — o'qituvchi dars bermay, tayyorgarlik va malaka oshirish bilan shug'ullanadigan kun. Bu kunlarda algoritm o'qituvchiga dars joylashmaydi. Bir nechta metodik kun tanlash mumkin. O'qituvchi sahifasida yoki menga \"Aliyev metodik kunlar — chorshanba, juma\" deb belgilang.",
     category: 'concept',
   },
   // ============ CLOUD SYNC ============

@@ -74,7 +74,13 @@ export async function importTeachersFromExcel(file: File, project: Project): Pro
     if (cMeth >= 0) {
       const m = s(rows[r][cMeth]).toLowerCase()
       const map: Record<string, number> = { du: 0, se: 1, ch: 2, pa: 3, ju: 4, sh: 5, пн: 0, вт: 1, ср: 2, чт: 3, пт: 4, сб: 5 }
-      t.methodicalDay = Object.entries(map).find(([k]) => m.startsWith(k))?.[1] ?? -1
+      const parts = m.split(/[,;\/\s]+/).filter(Boolean)
+      const days: number[] = []
+      for (const part of parts) {
+        const idx = Object.entries(map).find(([k]) => part.startsWith(k))?.[1]
+        if (idx != null && !days.includes(idx)) days.push(idx)
+      }
+      t.methodicalDays = days.sort((a, b) => a - b)
     }
     added.push(t)
     existing.add(name.toLowerCase())

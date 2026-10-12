@@ -129,12 +129,11 @@ export function validateProject(project: Project): ValidationResult {
         hint: `O'qituvchining "Haftalik maksimum" ni ${assigned} ga oshiring, yoki shu dars boshqa o'qituvchiga biriktiring`,
       })
     }
-    // Metodik kun availability'ni butunlay o'chirmayotgani
-    if (t.methodicalDay >= 0) {
+    if (t.methodicalDays.length > 0) {
       const availableSlots = (() => {
         let n = 0
         for (let d = 0; d < days; d++) {
-          if (d === t.methodicalDay) continue
+          if (t.methodicalDays.includes(d)) continue
           for (let p = 0; p < maxP; p++) if (t.availability?.[d]?.[p] ?? true) n++
         }
         return n
@@ -144,8 +143,8 @@ export function validateProject(project: Project): ValidationResult {
           severity: 'warning',
           entity: 'teacher',
           entityId: t.id,
-          message: `${t.fullName}: ${assigned} soat kerak, lekin faqat ${availableSlots} slot bo‘sh (metodik kun + ish vaqti grid'ini hisobga olib)`,
-          hint: 'Metodik kunni o‘chiring yoki ish vaqti gridida ko‘proq slot yoqing',
+          message: `${t.fullName}: ${assigned} soat kerak, lekin faqat ${availableSlots} slot bo'sh (metodik kunlar + ish vaqti grid'ini hisobga olib)`,
+          hint: "Metodik kunlarni kamaytiring yoki ish vaqti gridida ko'proq slot yoqing",
         })
       }
     }

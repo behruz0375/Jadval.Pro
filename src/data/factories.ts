@@ -171,7 +171,7 @@ export function newTeacher(school: School, fullName = ''): Teacher {
     short: shortName(fullName),
     phone: '',
     subjectIds: [],
-    methodicalDay: -1,
+    methodicalDays: [],
     dailyCapacity: 6,
     weeklyMax: 24,
     minimizeGaps: true,

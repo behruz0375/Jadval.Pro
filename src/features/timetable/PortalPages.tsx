@@ -365,12 +365,12 @@ export function TeacherPortal() {
                 <div className="font-medium">{teacher.weeklyMax} {t('soat')}</div>
               </div>
             </div>
-            {teacher.methodicalDay >= 0 && (
+            {teacher.methodicalDays.length > 0 && (
               <div className="flex items-center gap-3 px-4 py-3">
                 <Calendar size={16} className="text-muted" />
                 <div className="min-w-0 flex-1">
                   <div className="text-xs text-muted">{t('Uslubiy kun')}</div>
-                  <div className="font-medium">{['Du', 'Se', 'Ch', 'Pa', 'Ju', 'Sh', 'Ya'][teacher.methodicalDay]}</div>
+                  <div className="font-medium">{teacher.methodicalDays.map((d) => ['Du', 'Se', 'Ch', 'Pa', 'Ju', 'Sh', 'Ya'][d]).join(', ')}</div>
                 </div>
               </div>
             )}

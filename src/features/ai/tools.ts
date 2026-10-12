@@ -154,7 +154,7 @@ export const TOOLS: ToolDef[] = [
       { name: 'subjects', type: 'string[]', description: "O'qitadigan fan nomlari ro'yxati (ixtiyoriy)" },
       { name: 'weeklyMax', type: 'number', description: 'Haftalik maksimal soat (ixtiyoriy, standart 24)' },
       { name: 'dailyCapacity', type: 'number', description: "Kunlik maksimal dars soni (ixtiyoriy, standart 6)" },
-      { name: 'methodicalDay', type: 'string', description: "Metodik kun nomi: Dushanba..Shanba (ixtiyoriy)" },
+      { name: 'methodicalDays', type: 'string[]', description: "Metodik kun nomlari: Dushanba..Shanba (ixtiyoriy, bir yoki bir nechta)" },
     ],
     run: (a, ctx) => {
       const p = ctx.getProject()
@@ -163,16 +163,18 @@ export const TOOLS: ToolDef[] = [
       const t = newTeacher(p.school, name)
       const wk = n(a.weeklyMax); if (wk != null) t.weeklyMax = wk
       const dc = n(a.dailyCapacity); if (dc != null) t.dailyCapacity = dc
-      // Fanlarni biriktirish
       const subs = Array.isArray(a.subjects) ? a.subjects.map(s) : []
       if (subs.length) {
         t.subjectIds = subs.map((sn) => findEntity(p.subjects, sn)?.id).filter(Boolean) as string[]
       }
-      // Metodik kun
-      const md = s(a.methodicalDay)
-      if (md) {
-        const idx = DAYS_UZ.findIndex((d) => d.toLowerCase().startsWith(md.toLowerCase().slice(0, 3)))
-        if (idx >= 0) t.methodicalDay = idx
+      const mdList = Array.isArray(a.methodicalDays) ? a.methodicalDays.map(s) : a.methodicalDays ? [s(a.methodicalDays)] : []
+      if (mdList.length) {
+        const days: number[] = []
+        for (const md of mdList) {
+          const idx = DAYS_UZ.findIndex((d) => d.toLowerCase().startsWith(md.toLowerCase().slice(0, 3)))
+          if (idx >= 0 && !days.includes(idx)) days.push(idx)
+        }
+        t.methodicalDays = days.sort((a, b) => a - b)
       }
       ctx.addTeacher(t)
       return { ok: true, message: `✓ "${name}" o'qituvchi qo'shildi.`, navigate: 'teachers' }
@@ -444,12 +446,12 @@ export const TOOLS: ToolDef[] = [
   // ============ TAHRIRLASH ============
   {
     name: 'update_teacher',
-    description: "O'qituvchi ma'lumotlarini o'zgartiradi: haftalik norma, kunlik sig'im, metodik kun.",
+    description: "O'qituvchi ma'lumotlarini o'zgartiradi: haftalik norma, kunlik sig'im, metodik kunlar.",
     params: [
       { name: 'name', type: 'string', description: "O'qituvchi ismi", required: true },
       { name: 'weeklyMax', type: 'number', description: 'Yangi haftalik maksimal soat (ixtiyoriy)' },
       { name: 'dailyCapacity', type: 'number', description: 'Yangi kunlik sig\'im (ixtiyoriy)' },
-      { name: 'methodicalDay', type: 'string', description: 'Metodik kun nomi yoki "yo\'q" (ixtiyoriy)' },
+      { name: 'methodicalDays', type: 'string[]', description: 'Metodik kun nomlari yoki "yo\'q" (ixtiyoriy)' },
     ],
     run: (a, ctx) => {
       const p = ctx.getProject()
@@ -458,15 +460,20 @@ export const TOOLS: ToolDef[] = [
       const patch: Partial<Teacher> = {}
       const wk = n(a.weeklyMax); if (wk != null) patch.weeklyMax = wk
       const dc = n(a.dailyCapacity); if (dc != null) patch.dailyCapacity = dc
-      const md = s(a.methodicalDay)
-      if (md) {
-        if (/yo'q|yoq|нет|none/i.test(md)) patch.methodicalDay = -1
-        else {
-          const idx = DAYS_UZ.findIndex((d) => d.toLowerCase().startsWith(md.toLowerCase().slice(0, 3)))
-          if (idx >= 0) patch.methodicalDay = idx
+      const mdInput = Array.isArray(a.methodicalDays) ? a.methodicalDays.map(s) : a.methodicalDays ? [s(a.methodicalDays)] : []
+      if (mdInput.length) {
+        if (mdInput.some((m) => /yo'q|yoq|нет|none/i.test(m))) {
+          patch.methodicalDays = []
+        } else {
+          const days: number[] = []
+          for (const md of mdInput) {
+            const idx = DAYS_UZ.findIndex((d) => d.toLowerCase().startsWith(md.toLowerCase().slice(0, 3)))
+            if (idx >= 0 && !days.includes(idx)) days.push(idx)
+          }
+          patch.methodicalDays = days.sort((a, b) => a - b)
         }
       }
-      if (Object.keys(patch).length === 0) return { ok: false, message: 'Nimani o\'zgartirishni aniq ayting (norma, sig\'im, metodik kun).' }
+      if (Object.keys(patch).length === 0) return { ok: false, message: 'Nimani o\'zgartirishni aniq ayting (norma, sig\'im, metodik kunlar).' }
       ctx.updateTeacher(t.id, patch)
       return { ok: true, message: `✓ ${t.short} ma'lumotlari yangilandi.`, navigate: 'teachers' }
     },

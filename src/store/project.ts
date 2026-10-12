@@ -193,6 +193,19 @@ export const useProject = create<ProjectState>()(
       name: 'jadvalpro-project',
       storage: createJSONStorage(() => idbStorage),
       partialize: (s) => ({ project: s.project }),
+      merge: (persisted, current) => {
+        const s = persisted as { project?: Project }
+        if (s?.project?.teachers) {
+          s.project.teachers = s.project.teachers.map((t: any) => {
+            if (!Array.isArray(t.methodicalDays)) {
+              t.methodicalDays = t.methodicalDay != null && t.methodicalDay >= 0 ? [t.methodicalDay] : []
+            }
+            delete t.methodicalDay
+            return t
+          })
+        }
+        return { ...current, ...s } as ProjectState
+      },
     },
   ),
 )

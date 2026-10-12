@@ -105,7 +105,9 @@ export interface Teacher {
   short: string
   phone: string
   subjectIds: string[]
-  methodicalDay: number // 0..5, -1 = yo'q
+  methodicalDays: number[] // [0,2,4] = Du,Ch,Ju; [] = yo'q
+  /** @deprecated — eski formatdan migrate qilish uchun */
+  methodicalDay?: number
   dailyCapacity: number
   weeklyMax: number
   minimizeGaps: boolean // "Darcha" — oynalarni kamaytirish

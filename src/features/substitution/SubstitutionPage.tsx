@@ -52,7 +52,7 @@ export function SubstitutionPage() {
     const free = teachers.filter((t) => {
       if (t.id === absentId) return false
       if (busy?.has(t.id)) return false
-      if (t.methodicalDay === day) return false
+      if (t.methodicalDays.includes(day)) return false
       return t.availability?.[day]?.[slot - 1] ?? true
     })
     const recommended = free.filter((t) => t.subjectIds.includes(subjectId))

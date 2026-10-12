@@ -106,7 +106,7 @@ export function TeachersPage() {
         )
       },
     },
-    { key: 'md', header: 'Metodik kun', align: 'center', render: (r) => (r.methodicalDay >= 0 ? DAYS_UZ[r.methodicalDay] : '—') },
+    { key: 'md', header: 'Metodik kun', align: 'center', render: (r) => (r.methodicalDays.length ? r.methodicalDays.map((d) => DAYS_UZ[d]).join(', ') : '—') },
     { key: 'cap', header: 'Kunlik sig\'im', align: 'center', render: (r) => r.dailyCapacity },
     { key: 'gap', header: 'Darcha', align: 'center', render: (r) => (r.minimizeGaps ? <span className="chip text-ok">kam</span> : '—') },
     { key: 'avail', header: 'Ish vaqti', align: 'center', render: (r) => <AvailabilityBar value={r.availability} /> },
@@ -139,7 +139,7 @@ export function TeachersPage() {
             t.fullName,
             t.short,
             subjName(t.subjectIds),
-            t.methodicalDay >= 0 ? DAYS_UZ[t.methodicalDay] : '—',
+            t.methodicalDays.length ? t.methodicalDays.map((d) => DAYS_UZ[d]).join(', ') : '—',
             t.dailyCapacity,
             t.weeklyMax,
             teacherLoad(t.id, lessons),
@@ -169,15 +169,30 @@ export function TeachersPage() {
               autoFocus
             />
           </Field>
-          <Field label="Metodik kun" hint="Tanlangan bo'lsa — dastur avtomatik ravishda shu kunga dars qo'ymaydi">
-            <SelectField value={d.methodicalDay} onChange={(e) => set({ methodicalDay: +e.target.value })}>
-              <option value={-1}>— yo'q (tanlanmagan) —</option>
-              {DAYS_UZ.slice(0, school.workDays).map((day, i) => (
-                <option key={day} value={i}>
-                  {day}
-                </option>
-              ))}
-            </SelectField>
+          <Field label="Metodik kunlar" hint="Tanlangan kunlarda dastur avtomatik ravishda dars qo'ymaydi">
+            <div className="flex flex-wrap gap-2">
+              {DAYS_UZ.slice(0, school.workDays).map((day, i) => {
+                const active = d.methodicalDays.includes(i)
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => set({
+                      methodicalDays: active
+                        ? d.methodicalDays.filter((x) => x !== i)
+                        : [...d.methodicalDays, i].sort((a, b) => a - b),
+                    })}
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                      active
+                        ? 'border-accent bg-accent text-accent-fg'
+                        : 'border-border bg-surface hover:border-accent/40'
+                    }`}
+                  >
+                    {day}
+                  </button>
+                )
+              })}
+            </div>
           </Field>
           <Field label="Kunlik sig'im (soat)">
             <NumberField value={d.dailyCapacity} min={1} max={16} onChange={(e) => set({ dailyCapacity: +e.target.value })} />

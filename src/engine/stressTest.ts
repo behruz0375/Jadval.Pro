@@ -39,7 +39,7 @@ function buildProject(nClasses: number, nTeachers: number, nSubjects: number, ho
     short: `T${i + 1}`,
     phone: '',
     subjectIds: subjects.filter((_, j) => (j % nTeachers) === (i % nSubjects)).map((s) => s.id),
-    methodicalDay: -1,
+    methodicalDays: [],
     dailyCapacity: Math.max(5, Math.ceil(hoursPerClass / 4)),
     weeklyMax: Math.max(20, hoursPerClass * 2),
     minimizeGaps: true,

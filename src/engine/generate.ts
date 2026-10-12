@@ -113,7 +113,7 @@ export function generateTimetable(
         // level 3 dan boshlab kunlik cheksiz. Haftalik — HECH QACHON yumshamaydi.
         dailyCapacity: level >= 3 ? 0 : t.dailyCapacity + 2 * level,
         weeklyMax: t.weeklyMax, // QAT'IY — o'qituvchi tarifiga mos
-        methodicalDay: level >= 2 ? -1 : t.methodicalDay,
+        methodicalDays: level >= 2 ? [] : t.methodicalDays,
         // level 4: barcha slot'lar ochiq
         availability: level >= 4
           ? t.availability.map((row) => row.map(() => true))
@@ -240,7 +240,7 @@ function generateOnce(
   const teacherAllowed = (tid: string, d: number, p: number): boolean => {
     const t = teacherById.get(tid)
     if (!t) return false
-    if (t.methodicalDay === d) return false
+    if (t.methodicalDays.includes(d)) return false
     return t.availability?.[d]?.[p - 1] ?? true
   }
   const subjectAllowed = (sid: string, d: number, p: number): boolean => {
@@ -1071,7 +1071,7 @@ export function improveTimetable(
   const teacherAllowed = (tid: string, d: number, p: number) => {
     const t = teacherById.get(tid)
     if (!t) return false
-    if (t.methodicalDay === d) return false
+    if (t.methodicalDays.includes(d)) return false
     return t.availability?.[d]?.[p - 1] ?? true
   }
   const free = (e: TimetableEntry, d: number, p: number): boolean => {
