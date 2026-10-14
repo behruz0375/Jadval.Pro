@@ -34,6 +34,7 @@ import {
 import { useAuth } from '@/store/auth'
 import { useToast } from '@/store/toast'
 import { useProject } from '@/store/project'
+import { confirmAsync } from '@/store/confirm'
 import { Field, TextField, SelectField } from '@/components/Field'
 import { Modal } from '@/components/Modal'
 import { cx, uid } from '@/utils'
@@ -421,7 +422,13 @@ export function OwnerPanel() {
                         toast.error('Login topilmadi')
                         return
                       }
-                      if (!confirm(`${s.schoolName} mijoziga tegishli barcha jadval ma'lumotlari (sinflar, o'qituvchilar, fanlar, darslar) shu qurilmadan o'chiriladi. Bu amal faqat shu qurilmada ta'sir qiladi, mijozning o'z qurilmasidagi ma'lumotlariga tegmaydi. Davom etasizmi?`)) return
+                      const ok = await confirmAsync({
+                        title: `${s.schoolName} ma'lumotlarini tozalash`,
+                        message: `${s.schoolName} mijoziga tegishli barcha jadval ma'lumotlari (sinflar, o'qituvchilar, fanlar, darslar) shu qurilmadan o'chiriladi.\n\nBu amal faqat shu qurilmada ta'sir qiladi, mijozning o'z qurilmasidagi ma'lumotlariga tegmaydi.`,
+                        confirmText: 'Tozalash',
+                        tone: 'danger',
+                      })
+                      if (!ok) return
                       await useProject.getState().resetScope(`staff:${s.login.toLowerCase().trim()}`)
                       toast.success(`${s.schoolName} ma'lumotlari tozalandi`)
                     }}
@@ -794,8 +801,14 @@ function AuditLogCard() {
             <Download size={13} /> CSV
           </button>
           <button
-            onClick={() => {
-              if (confirm('Butun faollik jurnalini tozalaysizmi?')) {
+            onClick={async () => {
+              const ok = await confirmAsync({
+                title: 'Jurnalni tozalash',
+                message: 'Butun faollik jurnalini tozalaysizmi?',
+                confirmText: 'Tozala',
+                tone: 'danger',
+              })
+              if (ok) {
                 clearAudit()
                 toast.success('Jurnal tozalandi')
               }
@@ -1037,8 +1050,14 @@ function TemplatesCard() {
     setShowSave(false)
   }
 
-  const loadTemplate = (t: TemplateRecord) => {
-    if (!confirm(`"${t.name}" shablonini joriy loyihaga yuklaysizmi? Joriy ma'lumotlar o'zgaradi.`)) return
+  const loadTemplate = async (t: TemplateRecord) => {
+    const ok = await confirmAsync({
+      title: `"${t.name}" shabloni`,
+      message: `"${t.name}" shablonini joriy loyihaga yuklaysizmi? Joriy ma'lumotlar o'zgaradi.`,
+      confirmText: 'Yukla',
+      tone: 'danger',
+    })
+    if (!ok) return
     setProject(structuredClone(t.project))
     toast.success(`"${t.name}" shabloni yuklandi`)
   }

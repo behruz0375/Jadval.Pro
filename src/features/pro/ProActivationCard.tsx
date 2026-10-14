@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Crown, Check, KeyRound, LogOut, Sparkles } from 'lucide-react'
 import { useToast } from '@/store/toast'
+import { confirmAsync } from '@/store/confirm'
 import {
   useTier,
   getTierKey,
@@ -33,8 +34,14 @@ export function ProActivationCard() {
     }
   }
 
-  const handleDeactivate = () => {
-    if (!confirm('Pro versiya o‘chirilsinmi? Free versiyaga qaytasiz.')) return
+  const handleDeactivate = async () => {
+    const ok = await confirmAsync({
+      title: 'Pro versiyani o‘chirish',
+      message: 'Pro versiya o‘chirilsinmi? Free versiyaga qaytasiz.',
+      confirmText: 'O‘chir',
+      tone: 'danger',
+    })
+    if (!ok) return
     deactivatePro()
     toast.info('Pro versiya o‘chirildi')
   }

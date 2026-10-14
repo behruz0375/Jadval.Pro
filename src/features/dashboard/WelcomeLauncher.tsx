@@ -3,6 +3,7 @@ import { useProject } from '@/store/project'
 import { useUI } from '@/store/ui'
 import { useAuth } from '@/store/auth'
 import { useToast } from '@/store/toast'
+import { confirmAsync } from '@/store/confirm'
 import { openProjectFromFile } from '@/io/projectFile'
 import { useT } from '@/i18n'
 import type { LucideIcon } from 'lucide-react'
@@ -18,10 +19,22 @@ export function WelcomeLauncher({ onClose }: { onClose: () => void }) {
 
   const hasData = project.classes.length > 0 || project.lessons.length > 0
 
-  const doNew = () => {
-    if (hasData && !window.confirm(t("Yangi jadval? Joriy ma'lumotlar o'rniga bo'sh loyiha ochiladi."))) return
+  const doNew = async () => {
+    if (hasData) {
+      const ok = await confirmAsync({
+        title: t('Yangi jadval'),
+        message: t("Yangi jadval? Joriy ma'lumotlar o'rniga bo'sh loyiha ochiladi."),
+        confirmText: t('Ha, yangi'),
+        tone: 'danger',
+      })
+      if (!ok) return
+    }
     newProject()
-    toast.success(t('Yangi loyiha yaratildi'))
+    // Yangi loyiha boshlangandan keyin — Maktab sozlamalariga olib boramiz,
+    // chunki birinchi qadam shu (maktab nomi + ish kunlari). Bu bosh menyu'dan
+    // chalkashroq, lekin "nega hech narsa o'zgarmadi" degan savolni oldini oladi.
+    setActivePanel('school')
+    toast.success(t('Yangi loyiha yaratildi — avval maktab ma\'lumotlarini kiriting'))
     onClose()
   }
   const doOpen = async () => {
@@ -29,6 +42,7 @@ export function WelcomeLauncher({ onClose }: { onClose: () => void }) {
       const p = await openProjectFromFile()
       if (!p) return
       setProject(p)
+      setActivePanel('dashboard')
       toast.success(t('Loyiha ochildi'))
       onClose()
     } catch (e) {

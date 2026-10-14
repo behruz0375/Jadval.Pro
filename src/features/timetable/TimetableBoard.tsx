@@ -14,10 +14,12 @@ import {
   Redo2,
   StopCircle,
   FilePlus,
+  Shuffle,
 } from 'lucide-react'
 import { useProject } from '@/store/project'
 import { useUI } from '@/store/ui'
 import { useToast } from '@/store/toast'
+import { confirmAsync } from '@/store/confirm'
 import { useExpiry } from '@/features/pro/useExpiry'
 import { useT } from '@/i18n'
 import { useGenerator } from './useGenerator'
@@ -107,7 +109,7 @@ export function TimetableBoard() {
     [lessons],
   )
 
-  const commit = (next: TimetableEntry[], record = true) => {
+  const commit = (next: TimetableEntry[], record = true, seed?: number) => {
     if (record) {
       setPast((p) => [...p.slice(-49), entries])
       setFuture([])
@@ -121,7 +123,7 @@ export function TimetableBoard() {
       teacherGaps,
     }
     if (workingId && timetables.some((t) => t.id === workingId)) {
-      updateTimetable(workingId, { entries: next, stats })
+      updateTimetable(workingId, { entries: next, stats, ...(seed != null ? { seed } : {}) })
     } else {
       const v: TimetableVersion = {
         id: uid('tt_'),
@@ -129,6 +131,7 @@ export function TimetableBoard() {
         createdAt: new Date().toISOString(),
         entries: next,
         stats,
+        ...(seed != null ? { seed } : {}),
       }
       addTimetable(v)
       setWorkingId(v.id)
@@ -325,17 +328,27 @@ export function TimetableBoard() {
     setEdit(null)
   }
 
-  const clearClass = () => {
+  const clearClass = async () => {
     if (!cls) return
     const count = entries.filter((e) => e.classId === cls.id && !e.locked).length
     if (count === 0) return
-    if (!window.confirm(`${cls.name} sinfidagi ${count} ta darsni tozalaysizmi? (Qulflangan darslar tegilmaydi)`)) return
+    if (!(await confirmAsync({
+      title: `${cls.name} jadvalini tozalash`,
+      message: `${cls.name} sinfidagi ${count} ta darsni tozalaysizmi?\n(Qulflangan darslar tegilmaydi)`,
+      tone: 'danger',
+      confirmText: 'Tozala',
+    }))) return
     commit(entries.filter((e) => e.classId !== cls.id || e.locked))
   }
-  const clearAll = () => {
+  const clearAll = async () => {
     const count = entries.filter((e) => !e.locked).length
     if (count === 0) return
-    if (!window.confirm(`Barcha ${count} ta darsni tozalaysizmi? Bu amal qaytarib bo'lmaydi (lekin qulflangan darslar tegilmaydi).`)) return
+    if (!(await confirmAsync({
+      title: 'Barcha darslarni tozalash',
+      message: `Barcha ${count} ta darsni tozalaysizmi?\nBu amal qaytarib bo'lmaydi (lekin qulflangan darslar tegilmaydi).`,
+      tone: 'danger',
+      confirmText: 'Hammasini tozala',
+    }))) return
     commit(entries.filter((e) => e.locked))
   }
 
@@ -354,21 +367,35 @@ export function TimetableBoard() {
     toast.success("Bo'sh varaq ochildi — avvalgi jadval nusxaga saqlandi")
   }
 
-  const autoFill = () => {
-    if (lessons.length === 0) return toast.error('Avval darslarni kiriting')
+  const runAutoFill = (seed: number, successMsg: string) => {
     run(
       project,
-      { seed: Math.floor(Math.random() * 1e9) },
+      { seed },
       (v) => {
         // Qulflangan darslarni saqlab qolamiz
         const locked = entries.filter((e) => e.locked)
         const lockedKeys = new Set(locked.map((e) => `${e.classId}:${e.day}:${e.slot}`))
         const merged = [...locked, ...v.entries.filter((e) => !lockedKeys.has(`${e.classId}:${e.day}:${e.slot}`))]
-        commit(merged)
-        toast.success(v.stats.unplaced === 0 ? 'Jadval to‘liq tuzildi' : `${v.stats.unplaced} dars joylashmadi`)
+        commit(merged, true, seed)
+        toast.success(v.stats.unplaced === 0 ? successMsg : `${v.stats.unplaced} dars joylashmadi`)
       },
       (e) => toast.error('Xatolik: ' + e),
     )
+  }
+
+  const autoFill = () => {
+    if (lessons.length === 0) return toast.error('Avval darslarni kiriting')
+    // Oxirgi tuzilgan jadvalning seed'ini qayta ishlatamiz — hech narsa o'zgarmagan bo'lsa,
+    // AYNAN O'SHA jadval chiqadi (determinizm). Boshqa variant uchun "Yangi variant" tugmasi.
+    const lastSeed = workingVersion?.seed
+    const seed = lastSeed != null ? lastSeed : Math.floor(Math.random() * 1e9)
+    runAutoFill(seed, 'Jadval to‘liq tuzildi')
+  }
+
+  // Yangi tasodifiy variant — avvalgi jadvalning seed'idan farqli
+  const autoFillNew = () => {
+    if (lessons.length === 0) return toast.error('Avval darslarni kiriting')
+    runAutoFill(Math.floor(Math.random() * 1e9), 'Yangi variant tayyor')
   }
 
   if (classes.length === 0) {
@@ -406,10 +433,15 @@ export function TimetableBoard() {
           </button>
         </div>
 
-        <button onClick={autoFill} disabled={running || isReadOnly} className="btn btn-accent h-9 disabled:opacity-50">
+        <button onClick={autoFill} disabled={running || isReadOnly} className="btn btn-accent h-9 disabled:opacity-50" title={workingVersion?.seed != null ? tr('Oxirgi natijani qayta tuzadi (bir xil seed)') : tr('Yangi jadval tuzadi')}>
           {running ? <Wand2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
           {running ? `${tr('Tuzilmoqda')} ${Math.round(progress)}%` : tr('Avtomatik to‘ldirish')}
         </button>
+        {!running && workingVersion?.seed != null && (
+          <button onClick={autoFillNew} disabled={isReadOnly} className="btn btn-outline h-9 disabled:opacity-50" title={tr('Boshqa variant yaratish (yangi tasodifiy seed)')}>
+            <Shuffle size={15} /> {tr('Yangi variant')}
+          </button>
+        )}
         {running && (
           <button onClick={stop} className="btn btn-outline h-9 text-danger" title={tr('To‘xtatish')}>
             <StopCircle size={15} /> {tr('To‘xtatish')}

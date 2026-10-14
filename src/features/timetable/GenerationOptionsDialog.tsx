@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Play, CalendarDays, UserMinus, DoorOpen, Repeat, Cloud } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Play, CalendarDays, UserMinus, DoorOpen, Repeat, Cloud, Shuffle } from 'lucide-react'
 import { Modal } from '@/components/Modal'
 import { useT } from '@/i18n'
 import type { GenerateOptions } from '@/engine/generate'
@@ -21,10 +21,13 @@ export function GenerationOptionsDialog({
   open,
   onClose,
   onStart,
+  defaultSeed,
 }: {
   open: boolean
   onClose: () => void
   onStart: (opts: GenerateOptionsExt) => void
+  /** Oxirgi tuzilgan jadvalning seed'i — oldindan to'ldiriladi. Bir xil seed+ma'lumot = bir xil natija. */
+  defaultSeed?: number
 }) {
   const t = useT()
   const [flags, setFlags] = useState<Record<string, boolean>>({
@@ -38,6 +41,14 @@ export function GenerationOptionsDialog({
   const [useServerSide, setUseServerSide] = useState(false)
   const isPro = useIsPro()
   const cloudAvailable = isCloudSignedIn() && isPro
+
+  // Dialog ochilganda seed inputni oldingi jadval seed'i bilan to'ldiramiz.
+  // Shu bilan hech narsa o'zgartirmay yana bosilsa, aynan o'sha jadval chiqadi (determinizm).
+  useEffect(() => {
+    if (open) setSeed(defaultSeed != null ? String(defaultSeed) : '')
+  }, [open, defaultSeed])
+
+  const randomize = () => setSeed(String(Math.floor(Math.random() * 1e9)))
 
   const start = () => {
     const s = seed.trim() ? Number(seed.trim()) : undefined
@@ -139,13 +150,26 @@ export function GenerationOptionsDialog({
           <label className="label flex items-center gap-1">
             {t('Seed')}
           </label>
-          <input
-            type="number"
-            value={seed}
-            onChange={(e) => setSeed(e.target.value)}
-            placeholder={t("Bo'sh = tasodifiy")}
-            className="input mt-1"
-          />
+          <div className="mt-1 flex gap-1">
+            <input
+              type="number"
+              value={seed}
+              onChange={(e) => setSeed(e.target.value)}
+              placeholder={t("Bo'sh = tasodifiy")}
+              className="input flex-1"
+            />
+            <button
+              type="button"
+              onClick={randomize}
+              className="btn btn-outline h-9 w-9 shrink-0 p-0"
+              title={t('Tasodifiy yangi seed')}
+            >
+              <Shuffle size={14} />
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] text-muted">
+            {t("Bir xil seed = bir xil jadval. Yangisi uchun Shuffle bosing.")}
+          </p>
         </div>
       </div>
     </Modal>

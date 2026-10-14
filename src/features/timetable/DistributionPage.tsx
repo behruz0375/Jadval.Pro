@@ -16,6 +16,7 @@ import { countHardViolations, timetableGaps } from '@/features/_shared/compute'
 import { validateProject } from '@/engine/validate'
 import { useExpiry } from '@/features/pro/useExpiry'
 import { isInvalidClassName } from '@/io/importTaqsimot'
+import { confirmAsync } from '@/store/confirm'
 
 export function DistributionPage() {
   const project = useProject((s) => s.project)
@@ -39,10 +40,9 @@ export function DistributionPage() {
 
   const selected = timetables.find((t) => t.id === selectedId) ?? timetables[timetables.length - 1] ?? null
 
-  const generate = () => {
+  const generate = async () => {
     if (lessons.length === 0) return toast.error('Avval darslarni kiriting')
-    // Avval buzilgan ma'lumotlarni tekshiramiz: avvalgi bug'li importdan qolgan
-    // "#", "Xona", "№" kabi noma'qul sinflar yoki haddan tashqari ko'p soatli darslar (>50)
+    // Avval buzilgan ma'lumotlarni tekshiramiz
     const invalidClasses = project.classes.filter(c => isInvalidClassName(c.name) || isInvalidClassName(c.short || ''))
     const invalidClassIds = new Set(invalidClasses.map(c => c.id))
     const brokenLessons = project.lessons.filter(l => l.classIds.some(id => invalidClassIds.has(id)))
@@ -55,37 +55,38 @@ export function DistributionPage() {
       if (bloatedLessons.length > 0) {
         parts.push(`${bloatedLessons.length} ta buzilgan dars (50+ soat)`)
       }
-      const msg =
-        `Loyihada buzilgan ma'lumot aniqlandi:\n\n• ` + parts.join('\n• ') +
-        `\n\nBular avvalgi import xatosidan qolgan. Avtomatik tozalab, jadval tuzamizmi?\n\n` +
-        `OK = tozalab davom etish  |  Bekor = o'zim tuzataman`
-      if (!confirm(msg)) return
-      // Avtomatik tozalash
+      const ok = await confirmAsync({
+        title: "Buzilgan ma'lumot aniqlandi",
+        message: `Loyihada buzilgan ma'lumot aniqlandi:\n\n• ${parts.join('\n• ')}\n\nBular avvalgi import xatosidan qolgan. Avtomatik tozalab, jadval tuzamizmi?`,
+        confirmText: 'Tozalab davom etish',
+        cancelText: "O'zim tuzataman",
+        tone: 'danger',
+      })
+      if (!ok) return
       const nextClasses = project.classes.filter(c => !invalidClassIds.has(c.id))
       const nextLessons = project.lessons.filter(l =>
         !l.classIds.some(id => invalidClassIds.has(id)) && l.hoursPerWeek <= 50
       )
       setProject({ ...project, classes: nextClasses, lessons: nextLessons })
       toast.success(`${invalidClasses.length} sinf, ${brokenLessons.length + bloatedLessons.length} dars tozalandi — jadval tuzish davom etmoqda`)
-      // setProject asinxron — bir soniya kutib, qayta chaqiramiz
       setTimeout(() => generate(), 100)
       return
     }
     // Pre-flight: loyihani tekshiramiz
     const check = validateProject(project)
     if (check.willFail) {
-      // ERROR darajali muammolar: davom etmaslik tavsiya qilinadi, lekin foydalanuvchi istasa — konfirm bilan davom etadi
       const errorMessages = check.issues
         .filter((i) => i.severity === 'error')
         .map((i) => '• ' + i.message)
         .join('\n')
       const first = check.issues.find((i) => i.severity === 'error')
-      const msg =
-        `Jadval tuzishga qiyinchiliklar topildi (${check.issues.filter((i) => i.severity === 'error').length} ta xato):\n\n` +
-        errorMessages.slice(0, 500) +
-        (first?.hint ? '\n\nMaslahat: ' + first.hint : '') +
-        `\n\nDavom etasizmi? (Generator qo'lidan kelgancha joylashtiradi, qolgani unplaced bo'lib qoladi)`
-      if (!confirm(msg)) return
+      const ok = await confirmAsync({
+        title: 'Jadval tuzish — qiyinchiliklar',
+        message: `${check.issues.filter((i) => i.severity === 'error').length} ta xato topildi:\n\n${errorMessages.slice(0, 500)}${first?.hint ? '\n\nMaslahat: ' + first.hint : ''}\n\nDavom etamizmi? (Generator qo'lidan kelgancha joylashtiradi, qolgani unplaced bo'lib qoladi)`,
+        confirmText: 'Davom etish',
+        tone: 'danger',
+      })
+      if (!ok) return
     }
     if (check.issues.length > 0) {
       // Ogohlantirishlar bor — toast'da ko'rsatamiz, oldinga davom ettiramiz
@@ -378,7 +379,12 @@ export function DistributionPage() {
           </div>
         </>
       )}
-      <GenerationOptionsDialog open={optsOpen} onClose={() => setOptsOpen(false)} onStart={runWith} />
+      <GenerationOptionsDialog
+        open={optsOpen}
+        onClose={() => setOptsOpen(false)}
+        onStart={runWith}
+        defaultSeed={timetables.length > 0 ? timetables[timetables.length - 1].seed : undefined}
+      />
       <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
       {welcomeOpen && <WelcomeLauncher onClose={() => setWelcomeOpen(false)} />}
     </div>

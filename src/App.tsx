@@ -8,6 +8,7 @@ import { saveProjectToFile, openProjectFromFile } from '@/io/projectFile'
 import { requestPersistentStorage } from '@/storage/persist'
 import { AuthGate } from '@/features/auth/AuthGate'
 import { Toaster } from '@/components/Toaster'
+import { ConfirmHost } from '@/components/ConfirmHost'
 
 export default function App() {
   const theme = useUI((s) => s.theme)
@@ -71,6 +72,7 @@ export default function App() {
     <>
       <AuthGate />
       <Toaster />
+      <ConfirmHost />
     </>
   )
 }

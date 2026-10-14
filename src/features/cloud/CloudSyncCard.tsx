@@ -3,6 +3,7 @@ import { Cloud, CloudOff, CloudUpload, CloudDownload, LogIn, LogOut, Trash2, Ref
 import { useToast } from '@/store/toast'
 import { useT } from '@/i18n'
 import { useProject } from '@/store/project'
+import { confirmAsync } from '@/store/confirm'
 import { APP_VERSION, FILE_VERSION } from '@/constants'
 import type { Project } from '@/types'
 import { defaultProject } from '@/data/factories'
@@ -152,7 +153,13 @@ export function CloudSyncCard() {
   }
 
   async function handleDownload(id: number) {
-    if (!confirm(t('Joriy loyiha ustiga yoziladi. Davom etasizmi?'))) return
+    const ok = await confirmAsync({
+      title: t('Bulutdan yuklab olish'),
+      message: t('Joriy loyiha ustiga yoziladi. Davom etasizmi?'),
+      confirmText: t('Yukla'),
+      tone: 'danger',
+    })
+    if (!ok) return
     setBusy(true)
     try {
       const data = (await downloadSnapshot(id)) as Partial<Project>
@@ -178,7 +185,13 @@ export function CloudSyncCard() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm(t("O'chirilsinmi?"))) return
+    const ok = await confirmAsync({
+      title: t("O'chirish"),
+      message: t("Bulutdagi nusxani o'chirasizmi?"),
+      confirmText: t("O'chir"),
+      tone: 'danger',
+    })
+    if (!ok) return
     try {
       await deleteSnapshot(id)
       toast.success(t("O'chirildi"))
