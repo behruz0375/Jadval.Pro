@@ -2,9 +2,10 @@
 # https://render.com/docs/blueprint-spec
 #
 # "Create a Blueprint" bo'limida bu faylni ko'rsatsangiz, Render:
-#   - jadvalpro-api web service'ini quradi (Docker, backend/ ichidan)
-#   - jadvalpro-db PostgreSQL ni yaratadi (bepul, 90 kun)
-#   - DATABASE_URL va SECRET_KEY ni avtomatik ulaydi
+#   - jadvalpro-web  — React frontend (Static Site)
+#   - jadvalpro-api  — FastAPI backend (Docker)
+#   - jadvalpro-db   — PostgreSQL (bepul, 90 kun)
+#   - DATABASE_URL va SECRET_KEY avtomatik ulanadi
 
 databases:
   - name: jadvalpro-db
@@ -14,6 +15,26 @@ databases:
     region: frankfurt
 
 services:
+  # ── Frontend: React/Vite static site ────────────────────────────────────────
+  - type: web
+    name: jadvalpro-web
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    pullRequestPreviewsEnabled: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html  # SPA — barcha yo'llar index.html ga
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: public, max-age=0, must-revalidate
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable  # chunked fayllar uzun kesh
+
+  # ── Backend: FastAPI Docker service ─────────────────────────────────────────
   - type: web
     name: jadvalpro-api
     runtime: docker
@@ -39,7 +60,7 @@ services:
       - key: OWNER_PASSWORD
         sync: false  # birinchi deploy'da Render dashboard'dan qo'lda kiritasiz
       - key: CORS_ORIGINS
-        value: http://localhost:5173,http://localhost:5178
+        value: http://localhost:5173,http://localhost:5178,http://localhost:5181
       - key: CORS_ORIGIN_REGEX
-        # Vercel/Netlify preview, va o'z domeningiz
-        value: ^https?://(.*\.)?(vercel\.app|netlify\.app|jadval\.pro)$
+        # onrender.com (Render preview + prod), Vercel/Netlify preview, o'z domen
+        value: ^https?://(.*\.)?(onrender\.com|vercel\.app|netlify\.app|jadval\.pro)$
