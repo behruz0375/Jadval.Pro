@@ -1,4 +1,4 @@
-import { GraduationCap, Palette } from 'lucide-react'
+import { GraduationCap, Palette, Sparkles } from 'lucide-react'
 import { useProject } from '@/store/project'
 import { useAuth } from '@/store/auth'
 import { useToast } from '@/store/toast'
@@ -12,6 +12,8 @@ import { AvailabilityBar } from '@/components/AvailabilityBar'
 import { Upload } from 'lucide-react'
 import { useRef } from 'react'
 import { newTeacher, shortName, ENTITY_COLORS } from '@/data/factories'
+import { generateDemoData } from '@/data/demoSeed'
+import { confirmAsync } from '@/store/confirm'
 import { DAYS_UZ } from '@/constants'
 import { cx } from '@/utils'
 import type { Column } from '@/components/Table'
@@ -20,6 +22,7 @@ import type { Teacher } from '@/types'
 export function TeachersPage() {
   const project = useProject((s) => s.project)
   const addTeacher = useProject((s) => s.addTeacher)
+  const addSubject = useProject((s) => s.addSubject)
   const updateTeacher = useProject((s) => s.updateTeacher)
   const removeTeacher = useProject((s) => s.removeTeacher)
   const moveEntity = useProject((s) => s.moveEntity)
@@ -35,6 +38,22 @@ export function TeachersPage() {
       return
     }
     addTeacher(t)
+  }
+
+  const loadDemoData = async () => {
+    const ok = await confirmAsync({
+      title: "Demo: 80 ta o'qituvchi + fanlar",
+      message:
+        "80 ta tasodifiy o'qituvchi (metodik kunlari: ba'zisi 1 kun, ba'zisi 2 kun, ba'zisi 3 kun) va yetishmayotgan fanlar qo'shiladi. Mavjud ro'yxat o'chmaydi — faqat qo'shiladi.",
+      confirmText: 'Yaratish',
+    })
+    if (!ok) return
+    const { teachers, subjects: newSubjects } = generateDemoData(project, 80)
+    newSubjects.forEach(addSubject)
+    teachers.forEach(guardedAddTeacher)
+    toast.success(
+      `${teachers.length} ta o'qituvchi${newSubjects.length ? ` va ${newSubjects.length} ta fan` : ''} qo'shildi`,
+    )
   }
 
   const subjName = (ids: string[]) =>
@@ -154,6 +173,13 @@ export function TeachersPage() {
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={onImport} className="hidden" />
           <button onClick={shuffleColors} className="btn btn-outline justify-start" title="Barcha o'qituvchilarga rang taqsimlash">
             <Palette size={16} /> Ranglar
+          </button>
+          <button
+            onClick={loadDemoData}
+            className="btn btn-outline justify-start"
+            title="80 ta random o'qituvchi + fanlar (metodik kunlari turlicha)"
+          >
+            <Sparkles size={16} /> Demo (80)
           </button>
         </>
       }
