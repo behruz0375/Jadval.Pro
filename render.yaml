@@ -22,6 +22,11 @@ services:
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
     pullRequestPreviewsEnabled: false
+    envVars:
+      - key: VITE_PUBLIC_DEPLOY
+        value: "true"  # saytdan hech kim o'zini admin/zavuch deb ro'yxatdan o'tolmaydi
+      - key: VITE_API_URL
+        value: https://jadvalpro-api.onrender.com  # bulut backend URL (login va sinxron uchun)
     routes:
       - type: rewrite
         source: /*

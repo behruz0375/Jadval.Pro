@@ -6,7 +6,8 @@ import { Modal } from '@/components/Modal'
 import { Field, TextField } from '@/components/Field'
 import { ContactAdmin } from '@/components/ContactAdmin'
 import { BackgroundSlideshow } from '@/components/BackgroundSlideshow'
-import { APP_VERSION } from '@/constants'
+import { APP_VERSION, IS_PUBLIC_DEPLOY } from '@/constants'
+import { login as cloudLogin } from '@/features/cloud/api'
 
 /** Tiklash kodi bilan parolni qayta o'rnatish oynasi (Zavuch/O'TIBDO' parolni unutganda) */
 export function RecoveryModal({ role, open, onClose }: { role: StaffRole; open: boolean; onClose: () => void }) {
@@ -211,8 +212,11 @@ export function OwnerLoginModal({ open, onClose }: { open: boolean; onClose: () 
   const [pw, setPw] = useState('')
   const [pw2, setPw2] = useState('')
   const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const [recoverOpen, setRecoverOpen] = useState(false)
-  const isSetup = !ownerAuth
+  // Public deploy: faqat login — "Setup" mavjud emas. Admin hisobi backend'da
+  // (Render env'da OWNER_LOGIN/OWNER_PASSWORD) oldindan sozlangan.
+  const isSetup = !IS_PUBLIC_DEPLOY && !ownerAuth
   const isLegacy = !!ownerAuth && !ownerAuth.iterations
 
   const submit = async () => {
@@ -224,6 +228,25 @@ export function OwnerLoginModal({ open, onClose }: { open: boolean; onClose: () 
         return
       }
       e = await ownerSetup(login, pw)
+    } else if (IS_PUBLIC_DEPLOY && !ownerAuth) {
+      // Birinchi marta online admin kirmoqda — backend orqali tekshiramiz,
+      // keyin lokal ownerAuth yaratib qo'yamiz (keyingi kirishlar oflayn ishlasin).
+      setBusy(true)
+      try {
+        const resp = await cloudLogin(login.trim(), pw)
+        const role = (resp.user?.role || '').toLowerCase()
+        if (role !== 'admin' && role !== 'owner') {
+          setBusy(false)
+          setErr('Bu hisob admin emas')
+          return
+        }
+        e = await ownerSetup(login.trim(), pw)
+      } catch (err) {
+        setBusy(false)
+        setErr(err instanceof Error ? err.message : 'Serverga ulanib bo‘lmadi')
+        return
+      }
+      setBusy(false)
     } else {
       e = await ownerLogin(login, pw)
     }
@@ -245,8 +268,8 @@ export function OwnerLoginModal({ open, onClose }: { open: boolean; onClose: () 
         <>
           {err && <span className="mr-auto text-sm text-danger">{err}</span>}
           <button onClick={onClose} className="btn btn-outline">Bekor</button>
-          <button onClick={submit} className="btn btn-accent">
-            {isSetup ? <><UserPlus size={15} /> Yaratish</> : <><LogIn size={15} /> Kirish</>}
+          <button onClick={submit} disabled={busy} className="btn btn-accent disabled:opacity-50">
+            {isSetup ? <><UserPlus size={15} /> Yaratish</> : <><LogIn size={15} /> {busy ? 'Kirilmoqda…' : 'Kirish'}</>}
           </button>
         </>
       }
@@ -255,6 +278,10 @@ export function OwnerLoginModal({ open, onClose }: { open: boolean; onClose: () 
         <p className="mb-3 rounded-lg bg-warn/10 px-3 py-2 text-sm text-warn">
           Birinchi sozlash: bu qurilmada <b>admin hisobi</b> yaratiladi. Login va parolni eslab qoling —
           hisobga kirgach, «Hisob» bo'limida <b>tiklash kodi</b> ham oling (parol unutilsa yordam beradi)!
+        </p>
+      ) : IS_PUBLIC_DEPLOY && !ownerAuth ? (
+        <p className="mb-3 rounded-lg bg-accent/10 px-3 py-2 text-sm text-accent">
+          Admin login/parolini kiriting. Birinchi kirishda server orqali tekshiriladi.
         </p>
       ) : (
         <p className="mb-3 text-sm text-muted">
@@ -323,7 +350,10 @@ export function StaffLoginScreen({ role, onBack }: { role: StaffRole; onBack?: (
   const [recoverOpen, setRecoverOpen] = useState(false)
 
   const cred = staff[role]
-  const isSetup = role === 'director' && !cred
+  // Public deploy'da: Zavuch hisobi mahalliy "setup" orqali yaratilmaydi.
+  // Hisobni admin (Telegram orqali bog'langach) OwnerPanel'da yaratib,
+  // login/parolni mijozga beradi — shundan keyin odatiy "Kirish" ishlaydi.
+  const isSetup = !IS_PUBLIC_DEPLOY && role === 'director' && !cred
   const roleTitle = role === 'director' ? 'Zavuch' : "O'TIBDO'"
 
   // O'TIBDO' hisobi hali yaratilmagan
@@ -334,6 +364,23 @@ export function StaffLoginScreen({ role, onBack }: { role: StaffRole; onBack?: (
           O'TIBDO' hisobi hali yaratilmagan. Direktor tizimga kirib, <b>«Hisob»</b> bo'limida
           O'TIBDO' uchun login va parol yaratadi.
         </p>
+      </AuthLayout>
+    )
+  }
+
+  // Public deploy'da: Zavuch hisobi hali mavjud emas → admin bilan Telegramda bog'laning
+  if (IS_PUBLIC_DEPLOY && role === 'director' && !cred) {
+    return (
+      <AuthLayout title={`${roleTitle} — kirish`} onBack={onBack}>
+        <p className="mb-3 rounded-lg bg-accent/10 px-3 py-2.5 text-sm text-accent">
+          Hali hisob yo'q. <b>Admin</b> (dastur sotuvchisi) sizga Telegramda login va parol beradi —
+          shundan so'ng pastki qismdan oddiy <b>«Kirish»</b> ishlaydi.
+        </p>
+        <ContactAdmin
+          variant="default"
+          label="Login/parol olish uchun — Adminga Telegramda yozing"
+          className="mt-2"
+        />
       </AuthLayout>
     )
   }
