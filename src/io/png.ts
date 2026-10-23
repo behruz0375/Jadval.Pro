@@ -5,7 +5,7 @@
 // ============================================================
 import type { Project, TimetableVersion, TimetableEntry } from '@/types'
 import { DAYS_UZ } from '@/constants'
-import { WEEK_BADGE } from '@/utils'
+import { WEEK_BADGE, safeColor } from '@/utils'
 
 export type PngMode = 'class' | 'teacher' | 'room'
 
@@ -56,7 +56,7 @@ function gridHtml(project: Project, version: TimetableVersion, mode: PngMode, id
             : mode === 'teacher'
               ? [cName(e.classId), rShort(e.roomId)].filter(Boolean).join(' · ')
               : [cName(e.classId), tShort(e.teacherId)].filter(Boolean).join(' · ')
-        return `<div style="background:${pale(s?.color)};border-left:3px solid ${s?.color ?? '#999'};border-radius:3px;padding:3px 5px;margin:1px 0"><b>${wk}${name}</b>${sub ? `<div style="color:#555;font-size:11px">${esc(sub)}</div>` : ''}</div>`
+        return `<div style="background:${pale(safeColor(s?.color, ''))};border-left:3px solid ${safeColor(s?.color)};border-radius:3px;padding:3px 5px;margin:1px 0"><b>${wk}${name}</b>${sub ? `<div style="color:#555;font-size:11px">${esc(sub)}</div>` : ''}</div>`
       })
       .join('')
   }

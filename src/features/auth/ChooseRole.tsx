@@ -8,6 +8,7 @@ import { LangSwitcher } from '@/components/LangSwitcher'
 import { telegramUrl } from '@/utils'
 import { APP_VERSION } from '@/constants'
 import { useT } from '@/i18n'
+import { useOwnerContact } from '@/store/useOwnerContact'
 
 export type PickRole = 'director' | 'teacher' | 'student'
 
@@ -44,7 +45,7 @@ export function ChooseRole({
 }) {
   const t = useT()
   const [ownerOpen, setOwnerOpen] = useState(false)
-  const ownerContact = useAuth((s) => s.ownerContact)
+  const ownerContact = useOwnerContact()
   const machineCode = useAuth((s) => s.machineCode)
   const toast = useToast()
 

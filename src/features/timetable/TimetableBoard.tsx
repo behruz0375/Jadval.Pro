@@ -26,6 +26,8 @@ import { useGenerator } from './useGenerator'
 import { Modal } from '@/components/Modal'
 import { Field, SelectField } from '@/components/Field'
 import { DAYS_SHORT } from '@/constants'
+import { teacherOffMessage } from '@/features/_shared/teacherOff'
+import { autoRaiseMaxLessons, raisedMessage } from '@/features/_shared/shiftFix'
 import { timetableGaps, countHardViolations } from '@/features/_shared/compute'
 import { uid, cx, weekOverlap, WEEK_BADGE, WEEK_LABEL } from '@/utils'
 import type { TimetableEntry, TimetableVersion, WeekType } from '@/types'
@@ -139,19 +141,25 @@ export function TimetableBoard() {
   }
 
   // Orqaga / Oldinga qaytarish (undo / redo)
+  // Tarixdagi (undo/redo) yozuvlardan hozir mavjud bo'lmagan darslarga tegishlilarini tashlaymiz
+  // (masalan, taqsimot import qilinib dars olib tashlangan bo'lsa — yetim kataklar qaytib kelmasin)
+  const aliveOnly = (list: TimetableEntry[]) => {
+    const ids = new Set(lessons.map((l) => l.id))
+    return list.filter((e) => ids.has(e.lessonId))
+  }
   const undo = () => {
     if (past.length === 0) return
     const prev = past[past.length - 1]
     setPast((p) => p.slice(0, -1))
     setFuture((f) => [entries, ...f].slice(0, 50))
-    commit(prev, false)
+    commit(aliveOnly(prev), false)
   }
   const redo = () => {
     if (future.length === 0) return
     const nxt = future[0]
     setFuture((f) => f.slice(1))
     setPast((p) => [...p.slice(-49), entries])
-    commit(nxt, false)
+    commit(aliveOnly(nxt), false)
   }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -186,7 +194,7 @@ export function TimetableBoard() {
   const teacherBusy = (teacherId: string, day: number, slot: number, week: WeekType) =>
     entries.some(
       (e) =>
-        e.teacherId === teacherId &&
+        (e.teacherId === teacherId || e.teacher2Id === teacherId) &&
         e.day === day &&
         e.slot === slot &&
         e.classId !== cls?.id &&
@@ -201,6 +209,9 @@ export function TimetableBoard() {
         e.classId !== cls?.id &&
         weekOverlap(e.week, week),
     )
+  /** O'qituvchining metodik kuni yoki yopiq vaqtiga dars qo'yilsa — xato matni (aks holda null) */
+  const teacherOffMsg = (day: number, slot: number, ...tids: (string | undefined)[]): string | null =>
+    teacherOffMessage(teachers, day, slot, ...tids)
 
   const classLessons = useMemo(
     () => (cls ? lessons.filter((l) => l.classIds.includes(cls.id)) : []),
@@ -232,13 +243,18 @@ export function TimetableBoard() {
     if (placedCount(lesson.id) >= lesson.hoursPerWeek) return toast.info('Bu dars soati to‘ldi')
     if (lesson.teacher1Id && teacherBusy(lesson.teacher1Id, day, slot, weekMode))
       return toast.error(`O'qituvchi ${tName(lesson.teacher1Id)} bu vaqtda band`)
+    if (lesson.teacher2Id && teacherBusy(lesson.teacher2Id, day, slot, weekMode))
+      return toast.error(`O'qituvchi ${tName(lesson.teacher2Id)} bu vaqtda band`)
+    const offMsg = teacherOffMsg(day, slot, lesson.teacher1Id, lesson.teacher2Id)
+    if (offMsg) return toast.error(offMsg)
     if (lesson.roomId && roomBusy(lesson.roomId, day, slot, weekMode))
       return toast.error(`Xona ${rName(lesson.roomId)} bu vaqtda band`)
     const entry: TimetableEntry = {
-      id: `${lesson.id}_${cls.id}_${day}_${slot}_${weekMode}`,
+      id: uid('e_'),
       lessonId: lesson.id,
       classId: cls.id,
       teacherId: lesson.teacher1Id,
+      ...(lesson.teacher2Id ? { teacher2Id: lesson.teacher2Id } : {}),
       roomId: lesson.roomId,
       day,
       slot,
@@ -282,6 +298,10 @@ export function TimetableBoard() {
     if (overlap.length > 1) return toast.info('Bu katakni almashtirib bo‘lmaydi')
     const tgt = overlap[0]
     if (tgt?.locked) return toast.info('Maqsad dars qulflangan')
+    const offSrc = teacherOffMsg(day, slot, src.teacherId, src.teacher2Id)
+    if (offSrc) return toast.error(offSrc)
+    const offTgt = tgt ? teacherOffMsg(src.day, src.slot, tgt.teacherId, tgt.teacher2Id) : null
+    if (offTgt) return toast.error(offTgt)
     const next = entries.map((e) => {
       if (e.id === src.id) return { ...e, day, slot }
       if (tgt && e.id === tgt.id) return { ...e, day: src.day, slot: src.slot }
@@ -311,6 +331,15 @@ export function TimetableBoard() {
       )
     if (busyT(edit.teacherId)) return toast.error(`O'qituvchi ${tName(edit.teacherId)} bu vaqtda band`)
     if (edit.teacher2Id && busyT(edit.teacher2Id)) return toast.error(`O'qituvchi ${tName(edit.teacher2Id)} bu vaqtda band`)
+    const orig = entries.find((e) => e.id === edit.id)
+    const moved =
+      !orig ||
+      orig.day !== edit.day ||
+      orig.slot !== edit.slot ||
+      orig.teacherId !== edit.teacherId ||
+      orig.teacher2Id !== edit.teacher2Id
+    const offEdit = moved ? teacherOffMsg(edit.day, edit.slot, edit.teacherId, edit.teacher2Id) : null
+    if (offEdit) return toast.error(offEdit)
     if (
       edit.roomId &&
       entries.some(
@@ -368,16 +397,45 @@ export function TimetableBoard() {
   }
 
   const runAutoFill = (seed: number, successMsg: string) => {
+    // 2-smena "Kuniga maksimal dars"dan keyin boshlansa — avval sozlamani to'g'rilaymiz
+    const raised = autoRaiseMaxLessons()
+    if (raised) toast.info(raisedMessage(raised))
+    const proj = useProject.getState().project
+    // Qulflangan darslar generatorga QADALGAN joy sifatida beriladi: generator qolganini ularning atrofida tuzadi
+    // (yaroqsiz bo'lganlari, masalan hozirgi metodik kunga tushganlari, qadalmaydi va dars boshqa joyga qo'yiladi).
+    const lockedAll = entries.filter((e) => e.locked)
+    const pinsByLesson = new Map<string, { day: number; slot: number }[]>()
+    for (const e of [...lockedAll].sort((x, y) => x.day - y.day || x.slot - y.slot)) {
+      const lesson = proj.lessons.find((l) => l.id === e.lessonId)
+      if (!lesson) continue
+      const arr = pinsByLesson.get(e.lessonId) ?? []
+      const last = arr[arr.length - 1]
+      // Juft (ketma-ket) darsning ikkinchi katagi alohida qadalmaydi
+      if (lesson.consecutive && last && last.day === e.day && last.slot + 1 === e.slot) continue
+      if (!arr.some((p) => p.day === e.day && p.slot === e.slot)) arr.push({ day: e.day, slot: e.slot })
+      pinsByLesson.set(e.lessonId, arr)
+    }
+    const runProject = {
+      ...proj,
+      lessons: proj.lessons.map((l) => {
+        const extra = pinsByLesson.get(l.id)
+        if (!extra) return l
+        const own = l.pinned ?? []
+        return { ...l, pinned: [...own, ...extra.filter((p) => !own.some((o) => o.day === p.day && o.slot === p.slot))] }
+      }),
+    }
     run(
-      project,
+      runProject,
       { seed },
       (v) => {
-        // Qulflangan darslarni saqlab qolamiz
-        const locked = entries.filter((e) => e.locked)
-        const lockedKeys = new Set(locked.map((e) => `${e.classId}:${e.day}:${e.slot}`))
-        const merged = [...locked, ...v.entries.filter((e) => !lockedKeys.has(`${e.classId}:${e.day}:${e.slot}`))]
-        commit(merged, true, seed)
-        toast.success(v.stats.unplaced === 0 ? successMsg : `${v.stats.unplaced} dars joylashmadi`)
+        commit(v.entries, true, seed)
+        const unplaced = Math.max(0, totalRequired - v.entries.length)
+        toast.success(unplaced === 0 ? successMsg : `${unplaced} dars joylashmadi`)
+        const keep = new Set(
+          v.entries.filter((e) => e.locked).map((e) => `${e.lessonId}|${e.classId}|${e.day}|${e.slot}`),
+        )
+        const dropped = lockedAll.filter((e) => !keep.has(`${e.lessonId}|${e.classId}|${e.day}|${e.slot}`)).length
+        if (dropped > 0) toast.info(`${dropped} ta qulflangan dars joyida qola olmadi (metodik kun, band yoki yopiq vaqt) — boshqa joyga qo'yildi`)
       },
       (e) => toast.error('Xatolik: ' + e),
     )

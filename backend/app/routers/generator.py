@@ -72,6 +72,7 @@ def _build_project(db, school_id: int) -> dict:
                 "dailyCapacity": t.daily_capacity,
                 "weeklyMax": t.weekly_max,
                 "availabilityJson": t.availability_json,
+                "methodicalDays": [t.methodical_day] if t.methodical_day is not None else [],
             }
             for t in teachers
         ],

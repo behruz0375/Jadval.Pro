@@ -4,7 +4,7 @@ import { useToast } from '@/store/toast'
 import { useT } from '@/i18n'
 import { useProject } from '@/store/project'
 import { confirmAsync } from '@/store/confirm'
-import { APP_VERSION, FILE_VERSION } from '@/constants'
+import { APP_VERSION, FILE_VERSION, IS_PUBLIC_DEPLOY } from '@/constants'
 import type { Project } from '@/types'
 import { defaultProject } from '@/data/factories'
 import { useIsPro } from '@/features/pro/tier'
@@ -252,12 +252,14 @@ export function CloudSyncCard() {
             >
               {t('Kirish')}
             </button>
-            <button
-              onClick={() => setMode('register')}
-              className={mode === 'register' ? 'btn btn-accent h-8' : 'btn btn-ghost h-8'}
-            >
-              {t('Ro‘yxatdan o‘tish')}
-            </button>
+            {!IS_PUBLIC_DEPLOY && (
+              <button
+                onClick={() => setMode('register')}
+                className={mode === 'register' ? 'btn btn-accent h-8' : 'btn btn-ghost h-8'}
+              >
+                {t('Ro‘yxatdan o‘tish')}
+              </button>
+            )}
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <input

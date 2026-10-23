@@ -14,6 +14,7 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_db_path}"
 os.environ["SECRET_KEY"] = "test-secret"
 os.environ["OWNER_LOGIN"] = "admin"
 os.environ["OWNER_PASSWORD"] = "admin-test"
+os.environ["ALLOW_PUBLIC_REGISTRATION"] = "true"
 
 from app import database  # noqa: E402
 from app.config import settings  # noqa: E402

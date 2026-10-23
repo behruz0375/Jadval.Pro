@@ -8,6 +8,7 @@ import { useToast } from '@/store/toast'
 import { useT } from '@/i18n'
 import { telegramUrl } from '@/utils'
 import { cx } from '@/utils'
+import { useOwnerContact } from '@/store/useOwnerContact'
 
 interface Props {
   /** Avtomatik nusxalanadigan matn (bo'lsa) */
@@ -20,7 +21,7 @@ interface Props {
 }
 
 export function ContactAdmin({ message, variant = 'default', label, className }: Props) {
-  const ownerContact = useAuth((s) => s.ownerContact)
+  const ownerContact = useOwnerContact()
   const toast = useToast()
   const t = useT()
 

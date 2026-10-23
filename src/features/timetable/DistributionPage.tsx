@@ -14,13 +14,17 @@ import { cx, uid } from '@/utils'
 import { generateDirect } from '@/features/cloud/api'
 import { countHardViolations, timetableGaps } from '@/features/_shared/compute'
 import { validateProject } from '@/engine/validate'
+import { autoRaiseMaxLessons, raisedMessage } from '@/features/_shared/shiftFix'
+import { teacherOffReason } from '@/engine/teacherDays'
 import { useExpiry } from '@/features/pro/useExpiry'
-import { isInvalidClassName } from '@/io/importTaqsimot'
+import { isInvalidClass } from '@/io/importTaqsimot'
 import { confirmAsync } from '@/store/confirm'
+import { currentVersion } from '@/features/_shared/versions'
 
 export function DistributionPage() {
   const project = useProject((s) => s.project)
   const addTimetable = useProject((s) => s.addTimetable)
+  const addGeneratedTimetable = useProject((s) => s.addGeneratedTimetable)
   const removeTimetable = useProject((s) => s.removeTimetable)
   const updateTimetable = useProject((s) => s.updateTimetable)
   const setProject = useProject((s) => s.setProject)
@@ -38,19 +42,21 @@ export function DistributionPage() {
   const totalHours = lessons.reduce((a, l) => a + l.hoursPerWeek, 0)
   const noTeacher = lessons.filter((l) => !l.teacher1Id).length
 
-  const selected = timetables.find((t) => t.id === selectedId) ?? timetables[timetables.length - 1] ?? null
+  const selected = timetables.find((t) => t.id === selectedId) ?? currentVersion(timetables)
 
   const generate = async () => {
-    if (lessons.length === 0) return toast.error('Avval darslarni kiriting')
-    // Avval buzilgan ma'lumotlarni tekshiramiz
-    const invalidClasses = project.classes.filter(c => isInvalidClassName(c.name) || isInvalidClassName(c.short || ''))
-    const invalidClassIds = new Set(invalidClasses.map(c => c.id))
-    const brokenLessons = project.lessons.filter(l => l.classIds.some(id => invalidClassIds.has(id)))
-    const bloatedLessons = project.lessons.filter(l => l.hoursPerWeek > 50)
+    // Doim eng yangi holat bilan ishlaymiz (render closure eskirgan bo'lishi mumkin)
+    let proj = useProject.getState().project
+    if (proj.lessons.length === 0) return toast.error('Avval darslarni kiriting')
+    // 1) Buzilgan ma'lumotlarni tekshiramiz
+    const invalidClasses = proj.classes.filter((c) => isInvalidClass(c))
+    const invalidClassIds = new Set(invalidClasses.map((c) => c.id))
+    const brokenLessons = proj.lessons.filter((l) => l.classIds.some((id) => invalidClassIds.has(id)))
+    const bloatedLessons = proj.lessons.filter((l) => l.hoursPerWeek > 50)
     if (invalidClasses.length > 0 || bloatedLessons.length > 0) {
       const parts: string[] = []
       if (invalidClasses.length > 0) {
-        parts.push(`${invalidClasses.length} ta noma'qul sinf (${invalidClasses.map(c => c.name).slice(0, 3).join(', ')}${invalidClasses.length > 3 ? '...' : ''})`)
+        parts.push(`${invalidClasses.length} ta noma'qul sinf (${invalidClasses.map((c) => c.name).slice(0, 3).join(', ')}${invalidClasses.length > 3 ? '...' : ''})`)
       }
       if (bloatedLessons.length > 0) {
         parts.push(`${bloatedLessons.length} ta buzilgan dars (50+ soat)`)
@@ -63,17 +69,23 @@ export function DistributionPage() {
         tone: 'danger',
       })
       if (!ok) return
-      const nextClasses = project.classes.filter(c => !invalidClassIds.has(c.id))
-      const nextLessons = project.lessons.filter(l =>
-        !l.classIds.some(id => invalidClassIds.has(id)) && l.hoursPerWeek <= 50
-      )
-      setProject({ ...project, classes: nextClasses, lessons: nextLessons })
-      toast.success(`${invalidClasses.length} sinf, ${brokenLessons.length + bloatedLessons.length} dars tozalandi — jadval tuzish davom etmoqda`)
-      setTimeout(() => generate(), 100)
-      return
+      proj = {
+        ...proj,
+        classes: proj.classes.filter((c) => !invalidClassIds.has(c.id)),
+        lessons: proj.lessons.filter((l) => !l.classIds.some((id) => invalidClassIds.has(id)) && l.hoursPerWeek <= 50),
+      }
+      setProject(proj)
+      toast.success(`${invalidClasses.length} sinf, ${brokenLessons.length + bloatedLessons.length} dars tozalandi`)
     }
-    // Pre-flight: loyihani tekshiramiz
-    const check = validateProject(project)
+    // 2) 2-smena (masalan 8–14-darslar) "Kuniga maksimal dars"dan keyin boshlansa — sinflarga dars sig'maydi.
+    //    Bunday holatda sozlamani avtomatik to'g'rilaymiz.
+    const raised = autoRaiseMaxLessons()
+    if (raised) {
+      proj = useProject.getState().project
+      toast.info(raisedMessage(raised))
+    }
+    // 3) Pre-flight: loyihani tekshiramiz
+    const check = validateProject(proj)
     if (check.willFail) {
       const errorMessages = check.issues
         .filter((i) => i.severity === 'error')
@@ -100,14 +112,16 @@ export function DistributionPage() {
 
   const runWith = async (opts: GenerateOptionsExt) => {
     setOptsOpen(false)
+    const proj = useProject.getState().project
     const seed = opts.seed ?? Math.floor(Math.random() * 1e9)
     // Serverda tuzish (ixtiyoriy — foydalanuvchi dialogdan tanlasa)
     if (opts.useServerSide) {
+      let serverOk = false
       toast.info('Serverda tuzilmoqda...')
       try {
         const { useServerSide: _ignore, ...serverOpts } = opts
         void _ignore
-        const result = await generateDirect(project, { ...serverOpts, seed })
+        const result = await generateDirect(proj, { ...serverOpts, seed })
         // Server entrysi: { classIds, teacherId, roomId, day (1..), period (1..), lessonId, length }
         // Client formatida: { id, classId, teacherId, roomId, day (0..), slot (1..), lessonId }
         // Multi-class darslar har bir sinf uchun bitta entry.
@@ -131,8 +145,18 @@ export function DistributionPage() {
             })
           }
         }
+        // Server generatori metodik kun va o'qituvchining ish vaqtini bilmaydi — natijani shu yerda tekshiramiz
+        const teacherById = new Map(proj.teachers.map((t) => [t.id, t]))
+        const offCount = entries.filter((e) => {
+          const t = teacherById.get(e.teacherId)
+          return !!t && teacherOffReason(t, e.day, e.slot) !== null
+        }).length
+        if (offCount > 0) {
+          toast.error(`Server ${offCount} ta darsni o'qituvchining metodik kuni yoki yopiq vaqtiga qo'ydi — brauzerda qayta tuzilmoqda`)
+          throw new Error('__server_rule_violation__')
+        }
         const hard = countHardViolations(entries)
-        const gaps = timetableGaps(entries, project.teachers, project.school.workDays)
+        const gaps = timetableGaps(entries, proj.teachers, proj.school.workDays)
         const v: TimetableVersion = {
           id: uid('tt_'),
           name: 'Server (' + new Date().toLocaleTimeString() + ')',
@@ -147,19 +171,22 @@ export function DistributionPage() {
             softPenalty: 0,
           },
         }
-        addTimetable(v)
+        addGeneratedTimetable(v)
         setSelectedId(v.id)
         toast.success(`Server: ${result.stats.placed}/${result.stats.totalSessions} joylashtirildi`)
+        serverOk = true
       } catch (e) {
-        toast.error('Server xatosi: ' + (e instanceof Error ? e.message : String(e)))
+        const msg = e instanceof Error ? e.message : String(e)
+        if (msg !== '__server_rule_violation__') toast.error('Server xatosi: ' + msg + ' — brauzerda tuzilmoqda')
       }
-      return
+      if (serverOk) return
+      // Server ishlamasa yoki qoidani buzsa — brauzerdagi (lokal) generatorga o'tamiz
     }
     run(
-      project,
+      proj,
       { ...opts, seed },
       (v) => {
-        addTimetable(v)
+        addGeneratedTimetable(v)
         setSelectedId(v.id)
         if (v.stats.unplaced === 0) toast.success(`Jadval tayyor! ${v.stats.placed} dars joylashtirildi`)
         else {
@@ -173,14 +200,15 @@ export function DistributionPage() {
 
   // Yaxshilash — mavjud jadvalni buzmay, o'qituvchi/sinf oynalarini kamaytiradi (in-place local search)
   const optimize = () => {
-    const v = timetables.find((t) => t.id === selectedId) ?? timetables[timetables.length - 1]
+    // Yaxshilash har doim JORIY jadvalni (Tahta/Umumiy bilan bir xil) yaxshilaydi — eski nusxani emas, aks holda qo'lda tahrirlar yo'qolardi
+    const v = currentVersion(timetables)
     if (!v || v.entries.length === 0) return toast.error('Avval jadval tuzing')
     runImprove(
       project,
       v.entries,
       { seed: Math.floor(Math.random() * 1e9), minimizeGaps: true },
       (improved) => {
-        addTimetable(improved)
+        addGeneratedTimetable(improved)
         setSelectedId(improved.id)
         toast.success(`Yaxshilandi — o'qituvchi oynalari: ${improved.stats.teacherGaps}. Yana bosib yanada kamaytirishingiz mumkin.`)
       },
@@ -237,7 +265,12 @@ export function DistributionPage() {
         >
           <Home size={15} /> <span className="hidden sm:inline">Boshlang'ich oyna</span>
         </button>
-        <button onClick={() => setImportOpen(true)} className="btn btn-outline hover-lift h-9" title="Excel taqsimotdan ma'lumot qo’shish (namuna fayl bilan)">
+        <button
+          onClick={() => setImportOpen(true)}
+          disabled={isReadOnly}
+          className="btn btn-outline hover-lift h-9 disabled:opacity-50"
+          title={isReadOnly ? 'Muddat tugagan — faqat ko’rish rejimi' : "Excel taqsimot: fayldagi sinflarning darslari shu fayl bo'yicha yangilanadi (namuna fayl bilan)"}
+        >
           <FileSpreadsheet size={15} /> <span className="hidden sm:inline">Excel import</span>
         </button>
       </div>
@@ -383,7 +416,7 @@ export function DistributionPage() {
         open={optsOpen}
         onClose={() => setOptsOpen(false)}
         onStart={runWith}
-        defaultSeed={timetables.length > 0 ? timetables[timetables.length - 1].seed : undefined}
+        defaultSeed={currentVersion(timetables)?.seed}
       />
       <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
       {welcomeOpen && <WelcomeLauncher onClose={() => setWelcomeOpen(false)} />}

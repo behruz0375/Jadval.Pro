@@ -17,6 +17,7 @@ import {
 import { useTier } from '@/features/pro/tier'
 import { ProBadge } from '@/features/pro/ProBadge'
 import { useExpiry } from '@/features/pro/useExpiry'
+import { useOwnerContact } from '@/store/useOwnerContact'
 
 export function TopBar() {
   const toggleSidebar = useUI((s) => s.toggleSidebar)
@@ -25,7 +26,7 @@ export function TopBar() {
   const setSearchOpen = useUI((s) => s.setSearchOpen)
   const role = useAuth((s) => s.role)
   const logout = useAuth((s) => s.logout)
-  const ownerContact = useAuth((s) => s.ownerContact)
+  const ownerContact = useOwnerContact()
   const dirty = useProject((s) => s.dirty)
   const savedAt = useProject((s) => s.project.meta?.savedAt)
   const toast = useToast()

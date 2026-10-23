@@ -308,6 +308,12 @@ const DICT: Record<Exclude<Lang, 'uz'>, Record<string, string>> = {
     'soat': 'ч.',
     "kunlik sig'im": 'дневная норма',
     'dars': 'урок',
+    'metodik kun': 'методический день',
+    'ish vaqti yopiq': 'рабочее время закрыто',
+    "lekin dars qo'yilgan": 'но урок поставлен',
+    'faqat': 'только',
+    "ishlaydigan kun yo'q": 'нет рабочих дней',
+    "Metodik kun / yopiq vaqt": 'Методический день / закрытое время',
     // --- Portal ---
     'Tizimdan chiqdingiz': 'Вы вышли из системы',
     "Jadval hali tuzilmagan. Zavuch jadvalni tuzgach shu yerda ko'rinadi.":
@@ -754,6 +760,12 @@ const DICT: Record<Exclude<Lang, 'uz'>, Record<string, string>> = {
     'soat': 'h',
     "kunlik sig'im": 'daily capacity',
     'dars': 'period',
+    'metodik kun': 'methodical day',
+    'ish vaqti yopiq': 'working hours closed',
+    "lekin dars qo'yilgan": 'but a lesson is scheduled',
+    'faqat': 'only',
+    "ishlaydigan kun yo'q": 'no working days',
+    "Metodik kun / yopiq vaqt": 'Methodical day / closed time',
     // --- Portal ---
     'Tizimdan chiqdingiz': 'You logged out',
     "Jadval hali tuzilmagan. Zavuch jadvalni tuzgach shu yerda ko'rinadi.":

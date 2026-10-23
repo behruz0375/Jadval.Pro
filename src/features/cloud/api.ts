@@ -121,7 +121,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken()
   if (token) headers['Authorization'] = `Bearer ${token}`
   const res = await fetch(`${base}${path}`, { ...init, headers })
-  if (res.status === 401) {
+  // Login so'rovida 401 = "login/parol noto'g'ri" (sessiya tugagani emas) — server xabarini ko'rsatamiz
+  if (res.status === 401 && !path.startsWith('/api/auth/login')) {
     setToken(null)
     setStoredUser(null)
     throw new Error('Qayta kirish talab qilinadi')
@@ -237,7 +238,21 @@ export interface CloudCustomer {
   plan?: string | null
   notes?: string | null
   active: boolean
+  expires_at?: string | null
+  school_id?: number | null
   created_at: string
+}
+
+/** Server xabaridan "401 " kabi status prefiksini olib tashlaydi (foydalanuvchiga ko'rsatish uchun) */
+export function cloudErrorMessage(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e)
+  return msg.replace(/^\d{3}\s+/, '')
+}
+
+/** Server bilan aloqa umuman o'rnatilmadimi (internet yo'q / server yetib bo'lmaydi) */
+export function isCloudNetworkError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return /failed to fetch|networkerror|load failed|network request failed|kiritilmagan/i.test(msg)
 }
 
 export const listCustomers = () => request<CloudCustomer[]>('/api/customers')

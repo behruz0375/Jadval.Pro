@@ -1,10 +1,11 @@
 import { CalendarRange } from 'lucide-react'
 import { useProject } from '@/store/project'
 import { TimetableViewer } from './TimetableViewer'
+import { currentVersion } from '@/features/_shared/versions'
 
 export function ViewsPage() {
   const timetables = useProject((s) => s.project.timetables)
-  const latest = timetables[timetables.length - 1] ?? null
+  const latest = currentVersion(timetables)
 
   return (
     <div className="flex h-full flex-col gap-3 p-4">

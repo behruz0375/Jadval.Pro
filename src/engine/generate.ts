@@ -5,6 +5,7 @@
 import type { Project, TimetableEntry, TimetableVersion } from '@/types'
 import { weekOverlap } from '@/utils'
 import { countHardViolations } from '@/features/_shared/compute'
+import { teacherAssignedHours, teacherWorkableDays } from './teacherDays'
 
 export interface GenerateOptions {
   seed?: number
@@ -66,6 +67,26 @@ function mulberry32(seed: number) {
 
 const key = (a: string, d: number, p: number) => `${a}:${d}:${p}`
 
+/** O'qituvchi ishlay oladigan kunlar kam bo'lsa (masalan, faqat Juma — qolgan kunlar metodik),
+ *  kunlik sig'imni (dailyCapacity) haftalik yukka mos ravishda avtomatik oshiradi:
+ *  aks holda 6 soatlik standart limit yuk sig'maydigan o'qituvchi darslarini joylay olmay qolardi. */
+export function withSmartDailyCapacity(p: Project): Project {
+  const wd = p.school.workDays
+  const mp = p.school.maxLessonsPerDay
+  return {
+    ...p,
+    teachers: p.teachers.map((t) => {
+      if (t.dailyCapacity <= 0) return t
+      const workable = teacherWorkableDays(t, wd, mp).length
+      if (workable === 0) return t
+      const assigned = teacherAssignedHours(t, p.lessons)
+      const toPlace = t.weeklyMax > 0 ? Math.min(assigned, t.weeklyMax) : assigned
+      const need = Math.ceil(toPlace / workable)
+      return need > t.dailyCapacity ? { ...t, dailyCapacity: need } : t
+    }),
+  }
+}
+
 /**
  * Jadval tuzish — restarts > 1 bo'lsa bir necha urinish, eng yaxshisi saqlanadi.
  *
@@ -96,28 +117,25 @@ export function generateTimetable(
   const baseSeed = opts.seed ?? Math.floor(Math.random() * 1_000_000_000)
   let best: TimetableVersion | null = null
 
+  const smartProject = withSmartDailyCapacity(project)
+
   /** Project'ni cheklovlar bo'yicha yumshatib qaytaradi.
-   *  **weeklyMax hech qachon buzilmaydi** — o'qituvchi faqat o'ziga belgilangan
-   *  haftalik soatcha dars berishi mumkin (shartnoma/tarif asosida).
+   *  **Haftalik norma, metodik kunlar, o'qituvchi/sinf/fan "Ish vaqti" gridlari va smena hech qachon buzilmaydi** —
+   *  bular foydalanuvchi belgilagan qat'iy cheklovlar; joylashmagan dars ularni buzgandan ko'ra
+   *  joylashmay qolgani yaxshi (sababi "Konfliktlar" bo'limida ko'rsatiladi).
    *
-   *  level 1: dailyCapacity +2, lesson maxPerDay +1 (kunlik yuk biroz oshadi)
-   *  level 2: + methodik kunni vaqtincha olib tashlash
-   *  level 3: + dailyCapacity cheksiz (lekin weeklyMax saqlanadi)
-   *  level 4+: + har qanday availability'ni yoqish (eng extreme — weeklyMax hali ham saqlanadi) */
+   *  level 1: kunlik sig'im +2, dars maxPerDay +1 (kunlik yuk biroz oshadi)
+   *  level 2: kunlik sig'im +4, dars maxPerDay +2
+   *  level 3: kunlik sig'im cheksiz, juft darslar ajratiladi
+   *  level 4+: xonalarning ish vaqti ochiladi (eng extreme) */
   const relaxProject = (p: Project, level: number): Project => {
     if (level <= 0) return p
     return {
       ...p,
       teachers: p.teachers.map((t) => ({
         ...t,
-        // level 3 dan boshlab kunlik cheksiz. Haftalik — HECH QACHON yumshamaydi.
-        dailyCapacity: level >= 3 ? 0 : t.dailyCapacity + 2 * level,
-        weeklyMax: t.weeklyMax, // QAT'IY — o'qituvchi tarifiga mos
-        methodicalDays: level >= 2 ? [] : t.methodicalDays,
-        // level 4: barcha slot'lar ochiq
-        availability: level >= 4
-          ? t.availability.map((row) => row.map(() => true))
-          : t.availability,
+        // level 3 dan boshlab kunlik cheksiz (0 = cheksiz — o'zgarishsiz qoladi). Haftalik norma, metodik kun va ish vaqti — HECH QACHON yumshamaydi.
+        dailyCapacity: level >= 3 || t.dailyCapacity <= 0 ? 0 : t.dailyCapacity + 2 * level,
       })),
       lessons: p.lessons.map((l) => ({
         ...l,
@@ -125,15 +143,9 @@ export function generateTimetable(
         // level 3 dan boshlab consecutive (juft dars) ham sinishi mumkin — ikki alohida 1-soat sifatida
         consecutive: level >= 3 ? false : l.consecutive,
       })),
-      classes: level >= 4
-        ? p.classes.map((c) => ({ ...c, availability: c.availability.map((row) => row.map(() => true)) }))
-        : p.classes,
       rooms: level >= 4
         ? p.rooms.map((r) => ({ ...r, availability: r.availability.map((row) => row.map(() => true)) }))
         : p.rooms,
-      subjects: level >= 4
-        ? p.subjects.map((s) => ({ ...s, availability: s.availability.map((row) => row.map(() => true)) }))
-        : p.subjects,
     }
   }
 
@@ -149,7 +161,7 @@ export function generateTimetable(
       spreadWeight: Math.max(0, (opts.spreadWeight ?? 4) - relaxLevel),
       morningWeight: Math.max(0, (opts.morningWeight ?? 2) - relaxLevel),
     }
-    const projRelaxed = relaxProject(project, relaxLevel)
+    const projRelaxed = relaxProject(smartProject, relaxLevel)
     return generateOnce(projRelaxed, relaxed, sub, onSnapshot)
   }
 
@@ -175,11 +187,11 @@ export function generateTimetable(
     }
   }
 
-  // 3-bosqich — oxirgi chora: barcha cheklov yumshoq, project ham maksimal yumshatilgan
-  // Katta loyihalarda ham 100% joylash kafolati uchun 5 urinish
+  // 3-bosqich — oxirgi chora: yumshoq cheklovlar (kunlik yuk, juft dars, xona) maksimal yumshatiladi.
+  // Haftalik norma, metodik kun va ish vaqti gridlari bu bosqichda ham QAT'IY qoladi.
   if (autoRelax && best && best.stats.unplaced > 0) {
-    onProgress?.(80, `${best.stats.unplaced} dars hali qoldi — oxirgi urinish (barcha cheklov yumshoq)…`)
-    const extremeRelaxed = relaxProject(project, 4)
+    onProgress?.(80, `${best.stats.unplaced} dars hali qoldi — oxirgi urinish (yumshoq cheklovlar maksimal yumshatilgan)…`)
+    const extremeRelaxed = relaxProject(smartProject, 4)
     for (let i = 0; i < 5 && best!.stats.unplaced > 0; i++) {
       const v = generateOnce(extremeRelaxed, {
         ...opts, seed: baseSeed + 99999 + i * 331,
@@ -221,6 +233,17 @@ function generateOnce(
   const classById = new Map(classes.map((c) => [c.id, c]))
   const teacherById = new Map(teachers.map((t) => [t.id, t]))
   const subjectById = new Map(subjects.map((s) => [s.id, s]))
+  /** O'qituvchi ishlay oladigan kunlar — kunlik yuk muvozanati va "eng kam yukli kun" tanlovi shularga nisbatan */
+  const allDayIdx = Array.from({ length: days }, (_, i) => i)
+  const workableDays = new Map(teachers.map((t) => [t.id, teacherWorkableDays(t, days, maxP)]))
+  const workableDayCount = new Map(teachers.map((t) => [t.id, Math.max(1, (workableDays.get(t.id) ?? []).length)]))
+  /** O'qituvchiga biriktirilgan haftalik soat (norma bilan chegaralangan) — ideal kunlik yuk uchun */
+  const plannedHours = new Map(
+    teachers.map((t) => {
+      const a = teacherAssignedHours(t, lessons)
+      return [t.id, t.weeklyMax > 0 ? Math.min(a, t.weeklyMax) : a] as const
+    }),
+  )
 
   // Har bir sinf uchun ruxsat etilgan (day, period) — navbat gridi + sinf ish vaqti
   const classAllowed = new Map<string, Set<number>>() // classId -> set of day*100+period
@@ -447,9 +470,10 @@ function generateOnce(
       const te = teacherById.get(tid)
       if (!te) continue
       const dayCnt = teacherDayCount.get(`${tid}:${d}`) ?? 0
-      // Idealga yaqin: weeklyMax / days. Undan ortiq bo'lsa jarima.
-      const capacity = te.weeklyMax > 0 ? te.weeklyMax : (te.dailyCapacity > 0 ? te.dailyCapacity * days : 30)
-      const idealPerDay = capacity / days
+      // Idealga yaqin: biriktirilgan soat / ishlaydigan kunlar. Undan ortiq bo'lsa jarima.
+      const planned = plannedHours.get(tid) ?? 0
+      const capacity = planned > 0 ? planned : te.weeklyMax > 0 ? te.weeklyMax : te.dailyCapacity > 0 ? te.dailyCapacity * days : 30
+      const idealPerDay = capacity / (workableDayCount.get(tid) ?? days)
       if (dayCnt >= idealPerDay + 1) {
         cost += (dayCnt - idealPerDay) * 0.8             // ortiqcha yuk — jarima
       } else if (dayCnt === 0) {
@@ -775,8 +799,9 @@ function generateOnce(
         // 1-2 ta to'siq — ularni ko'chirishga urinamiz
         const blockers = findBlockers(s, d, p)
         if (blockers.length > depth) continue
-        // Blockerlarni vaqtincha olib tashlaymiz
+        // Blockerlarni vaqtincha olib tashlaymiz (asl joylarini eslab qolamiz — relocate() ularni joyida o'zgartiradi)
         for (const b of blockers) occupy(b, false)
+        const origPos = blockers.map((b) => ({ b, day: b.day, start: b.start, roomId: b.roomId }))
         if (canPlace(s, d, p)) {
           const room = pickRoom(s, d, p)
           if (room.ok) {
@@ -793,10 +818,11 @@ function generateOnce(
               placements.push(pl)
               return true
             }
-            // Undo: joylangan blockerlarni avvalgi joyiga qaytarish qiyin — oddiyroq, placementni bekor qilib
-            // blockerlarni asl joyiga qo'yamiz
+            // Undo: yangi placementni va ko'chirilgan blockerlarni bo'shatamiz, hammasini ASL joyiga qaytaramiz.
+            // (Aks holda blockerlar yangi koordinatalarida qayta band qilinib, sinf/o'qituvchi to'qnashuvi paydo bo'lardi.)
             occupy(pl, false)
             for (const r of relocated) occupy(r, false)
+            for (const o of origPos) { o.b.day = o.day; o.b.start = o.start; o.b.roomId = o.roomId }
           }
         }
         // Blockerlarni qaytarish
@@ -899,6 +925,8 @@ function generateOnce(
   for (let it = 0; it < saIter; it++) {
     if (it % 200 === 0) onProgress?.(80 + (it / saIter) * 15, `Optimallashtirish... ${Math.round((it / saIter) * 100)}%`)
 
+    // Hech bir dars joylashmagan bo'lsa (masalan, barcha o'qituvchilar yopiq) — yaxshilashga hech narsa yo'q
+    if (placements.length === 0) break
     const idx = Math.floor(rng() * placements.length)
     const pl = placements[idx]
     if ((pl.session as unknown as { _pinned?: boolean })._pinned) { saTemp *= saCoolRate; continue }
@@ -927,27 +955,36 @@ function generateOnce(
 
       // Swap: pl -> pl2 joyiga, pl2 -> pl joyiga
       if (canPlace(pl.session, old2Day, old2Start) && canPlace(pl2.session, oldDay, oldStart)) {
+        // Xonalar ketma-ket tanlanadi: birinchi dars xonani band qilgach, ikkinchisi uchun qolganlaridan olinadi
+        // (ikkalasi bir vaqtda turgan bo'lsa, bir xil xonani tanlab ikki marta band qilmasligi uchun)
         const room1 = pickRoom(pl.session, old2Day, old2Start)
-        const room2 = pickRoom(pl2.session, oldDay, oldStart)
-        if (room1.ok && room2.ok) {
+        if (room1.ok) {
           pl.day = old2Day; pl.start = old2Start; pl.roomId = room1.roomId
           occupy(pl, true)
-          pl2.day = oldDay; pl2.start = oldStart; pl2.roomId = room2.roomId
-          occupy(pl2, true)
+          const room2 = canPlace(pl2.session, oldDay, oldStart)
+            ? pickRoom(pl2.session, oldDay, oldStart)
+            : { ok: false, roomId: undefined }
+          if (room2.ok) {
+            pl2.day = oldDay; pl2.start = oldStart; pl2.roomId = room2.roomId
+            occupy(pl2, true)
 
-          const newScore1 = saScore(pl.session, pl.day, pl.start)
-          const newScore2 = saScore(pl2.session, pl2.day, pl2.start)
-          const delta = (newScore1 + newScore2) - (oldScore1 + oldScore2)
+            const newScore1 = saScore(pl.session, pl.day, pl.start)
+            const newScore2 = saScore(pl2.session, pl2.day, pl2.start)
+            const delta = (newScore1 + newScore2) - (oldScore1 + oldScore2)
 
-          if (delta < 0 || rng() < Math.exp(-delta / Math.max(saTemp, 0.001))) {
-            saTemp *= saCoolRate; continue // Qabul qilindi
+            if (delta < 0 || rng() < Math.exp(-delta / Math.max(saTemp, 0.001))) {
+              saTemp *= saCoolRate; continue // Qabul qilindi
+            }
+            // Rad — qaytarish
+            occupy(pl, false); occupy(pl2, false)
+            pl.day = oldDay; pl.start = oldStart; pl.roomId = oldRoom
+            pl2.day = old2Day; pl2.start = old2Start; pl2.roomId = old2Room
+            occupy(pl, true); occupy(pl2, true)
+            saTemp *= saCoolRate; continue
           }
-          // Rad — qaytarish
-          occupy(pl, false); occupy(pl2, false)
+          // Ikkinchi dars sig'madi — birinchisini asl joyiga qaytaramiz
+          occupy(pl, false)
           pl.day = oldDay; pl.start = oldStart; pl.roomId = oldRoom
-          pl2.day = old2Day; pl2.start = old2Start; pl2.roomId = old2Room
-          occupy(pl, true); occupy(pl2, true)
-          saTemp *= saCoolRate; continue
         }
       }
       // Swap amalga oshmadi — qaytarish
@@ -963,9 +1000,16 @@ function generateOnce(
     // O'qituvchi yuki muvozanati: past yukli kunga ko'chirish imtiyoz
     let nd: number; let np: number
     if (rng() < 0.3) {
-      // Aqlli tanlov: eng kam yukli kunni topish
-      let minLoad = Infinity; let bestDay = 0
-      for (let dd = 0; dd < days; dd++) {
+      // Aqlli tanlov: o'qituvchi(lar) ishlay oladigan kunlar ichidan eng kam yukli kunni topish
+      // (metodik kunlar yuki 0 bo'lgani uchun avval doim shu kunlar tanlanib, urinish bekor ketardi)
+      let candDays = allDayIdx
+      for (const tid of pl.session.teacherIds) {
+        const wd = workableDays.get(tid)
+        if (wd) candDays = candDays.filter((x) => wd.includes(x))
+      }
+      if (candDays.length === 0) candDays = allDayIdx
+      let minLoad = Infinity; let bestDay = candDays[0]
+      for (const dd of candDays) {
         let load = 0
         for (const tid of pl.session.teacherIds) {
           load += teacherDayCount.get(`${tid}:${dd}`) ?? 0
@@ -1051,11 +1095,14 @@ export function improveTimetable(
   onSnapshot?: SnapshotFn,
 ): TimetableVersion {
   const rng = mulberry32(opts.seed ?? 20260)
-  const { school, classes, subjects, teachers, lessons } = project
+  const { school, classes, subjects, teachers, lessons, rooms } = withSmartDailyCapacity(project)
   const days = school.workDays
   const maxP = school.maxLessonsPerDay
+  const maxClassDay = opts.maxLessonsPerClassDay ?? 6
   const classById = new Map(classes.map((c) => [c.id, c]))
   const teacherById = new Map(teachers.map((t) => [t.id, t]))
+  const subjectById = new Map(subjects.map((x) => [x.id, x]))
+  const roomById = new Map(rooms.map((r) => [r.id, r]))
   const lessonById = new Map(lessons.map((l) => [l.id, l]))
 
   const entries = existing.map((e) => ({ ...e }))
@@ -1074,6 +1121,21 @@ export function improveTimetable(
     if (t.methodicalDays.includes(d)) return false
     return t.availability?.[d]?.[p - 1] ?? true
   }
+  // Generator qat'iy deb biladigan qo'shimcha cheklovlar — Yaxshilash ham ularni buzmasligi kerak
+  const subjectOrRoomOpen = (e: TimetableEntry, d: number, p: number): boolean => {
+    const sj = lessonById.get(e.lessonId)?.subjectId
+    const subj = sj ? subjectById.get(sj) : undefined
+    if (!(subj?.availability?.[d]?.[p - 1] ?? true)) return false
+    if (e.roomId && !(roomById.get(e.roomId)?.availability?.[d]?.[p - 1] ?? true)) return false
+    return true
+  }
+  /** Sinfning shu kundagi darslari soni (ignore dagi yozuvlarsiz) + 1 kunlik chegaradan oshmasligi kerak */
+  const classDayCapOk = (e: TimetableEntry, d: number, ignore: string[]): boolean => {
+    if (maxClassDay <= 0 || d === e.day) return true
+    const cnt = entries.filter((o) => o.classId === e.classId && o.day === d && !ignore.includes(o.id)).length
+    return cnt + 1 <= maxClassDay
+  }
+
   const free = (e: TimetableEntry, d: number, p: number): boolean => {
     for (const o of entries) {
       if (o.id === e.id || o.day !== d || o.slot !== p || !weekOverlap(o.week, e.week)) continue
@@ -1084,6 +1146,7 @@ export function improveTimetable(
     }
     for (const tid of [e.teacherId, e.teacher2Id]) if (tid && !teacherAllowed(tid, d, p)) return false
     if (!classAllowed(e.classId, d, p)) return false
+    if (!subjectOrRoomOpen(e, d, p) || !classDayCapOk(e, d, [e.id])) return false
     // Dars kunlik limiti (maxPerDay) — e'ni d-kunga ko'chirsak buzilmasligi kerak
     const lesson = lessonById.get(e.lessonId)
     if (lesson && lesson.maxPerDay > 0) {
@@ -1123,8 +1186,14 @@ export function improveTimetable(
   const teacherDayGap = (tid: string | undefined, d: number) =>
     tid ? gapOf(entries.filter((e) => (e.teacherId === tid || e.teacher2Id === tid) && e.day === d).map((e) => e.slot)) : 0
 
-  const movable = entries.filter((e) => !e.locked && !lessonById.get(e.lessonId)?.consecutive)
-  const N = Math.min(6000, Math.max(600, movable.length * 30))
+  // Birlashtirilgan (bir nechta sinfli) darslar va juft darslar joyida qoladi: ularning yozuvlarini
+  // bittadan ko'chirsak, dars bo'linib ketadi va o'qituvchining haftalik normasi oshib ketishi mumkin.
+  const movable = entries.filter((e) => {
+    if (e.locked) return false
+    const l = lessonById.get(e.lessonId)
+    return !l?.consecutive && (l?.classIds.length ?? 1) <= 1
+  })
+  const N = Math.min(24000, Math.max(1500, movable.length * 40))
 
   const totalRequired = lessons.reduce((a, l) => a + l.hoursPerWeek * Math.max(1, l.classIds.length), 0)
 
@@ -1154,9 +1223,8 @@ export function improveTimetable(
     for (const cid of cids) for (let d = 0; d < days; d++) soft += classDayGap(cid, d) * 2
     let gaps = 0
     for (const t of teachers) for (let d = 0; d < days; d++) gaps += teacherDayGap(t.id, d)
-    // O'qituvchi yuki muvozanati qo'shiladi
-    let imbalance = 0
-    for (const t of teachers) imbalance += teacherLoadImbalance(t.id)
+    // Ko'rsatiladigan "yumshoq jarima" generator/doska bilan bir xil o'lchovda (faqat sinf oynalari × 2) —
+    // aks holda "Yaxshilash"dan keyin son sakrab, jadval yomonlashgandek ko'rinadi.
     return {
       id: 'tt_' + Date.now().toString(36),
       name: 'Ishchi jadval',
@@ -1166,53 +1234,74 @@ export function improveTimetable(
         placed: entries.length,
         unplaced: Math.max(0, totalRequired - entries.length),
         hardViolations: countHardViolations(entries),
-        softPenalty: soft + Math.round(imbalance),
+        softPenalty: soft,
         teacherGaps: gaps,
       },
     }
   }
 
-  /** Bir entry uchun mahalliy sifat bali (kichik = yaxshi) */
-  const entryCost = (e: TimetableEntry): number => {
-    let cost = 0
-    const t1 = e.teacherId; const t2 = e.teacher2Id
-    // Sinf oynasi
-    cost += classDayGap(e.classId, e.day) * 2
-    // O'qituvchi darchasi
-    cost += teacherDayGap(t1, e.day) + teacherDayGap(t2, e.day)
-    // O'qituvchi yuk muvozanati
-    cost += teacherLoadImbalance(t1) * 0.3 + teacherLoadImbalance(t2) * 0.3
-    // Fan tarqalishi: bir kunda bir fan 2+ marta bo'lsa jarima
-    const subjOfE = lessonById.get(e.lessonId)?.subjectId
-    const spread = subjectDaySpread(e.classId, e.day, subjOfE)
-    if (spread > 1) cost += (spread - 1) * 3
-    // Og'ir fan slot tartibi
-    const subj = subjOfE ? subjects.find((s) => s.id === subjOfE) : undefined
-    const weight = subj?.weight ?? 5
-    if (weight >= 7 && (e.slot < 2 || e.slot > 4)) cost += 0.5
-    if (weight <= 3 && e.slot <= 1) cost += 0.5
-    return cost
-  }
-
   const snapEvery = Math.max(50, Math.floor(N / 10))
   onProgress?.(5, 'Yaxshilash boshlandi...')
 
-  // Simulated Annealing — avval best-swap, keyin ba'zan yomonroq ham qabul qilish bilan
-  // optima'dan chiqishga imkon beradi. T boshlanishda yuqori, oxirgacha sovitiladi.
-  const T0 = 4.0      // boshlang'ich temperatura — kattaroqda erkin harakatlanadi
-  const Tmin = 0.005   // minimal temperatura — oxirida deyarli greedy
-  const coolRate = Math.pow(Tmin / T0, 1 / N)
-  let T = T0
-  // Eng yaxshi topilgan konfiguratsiya (SA tasodifiy katta sakrashlardan keyin yomonlashishi mumkin)
-  let bestEntries = entries.map((e) => ({ ...e }))
-  let bestScore = (() => {
-    let s = 0
-    for (const t of teachers) for (let d = 0; d < days; d++) s += teacherDayGap(t.id, d)
-    const cids = new Set(entries.map((e) => e.classId))
-    for (const cid of cids) for (let d = 0; d < days; d++) s += classDayGap(cid, d)
-    for (const t of teachers) s += teacherLoadImbalance(t.id) * 0.3
-    return s
-  })()
+  // --- Aniq "delta" bilan simulated annealing ---
+  // Har bir ko'chirishda faqat o'zgargan (sinf, kun), (o'qituvchi, kun), o'qituvchi yuki va fan tarqalishi
+  // hisoblari qayta baholanadi — shuning uchun eski va yangi holat farqi ham ketgan, ham kelgan kunni qamraydi.
+  // Eng yaxshi holat har doim saqlanadi; yaxshilanish topilmasa boshlang'ich jadval o'zgarishsiz qaytadi.
+  const slotTerm = (e: TimetableEntry): number => {
+    const subjId = lessonById.get(e.lessonId)?.subjectId
+    const weight = (subjId ? subjects.find((s) => s.id === subjId)?.weight : undefined) ?? 5
+    let c = 0
+    if (weight >= 7 && (e.slot < 2 || e.slot > 4)) c += 0.5
+    if (weight <= 3 && e.slot <= 1) c += 0.5
+    return c
+  }
+  const keysFor = (es: TimetableEntry[], dayList: number[]): Set<string> => {
+    const ks = new Set<string>()
+    for (const e of es) {
+      const sj = lessonById.get(e.lessonId)?.subjectId
+      for (const d of dayList) {
+        ks.add(`c|${e.classId}|${d}`)
+        if (e.teacherId) ks.add(`t|${e.teacherId}|${d}`)
+        if (e.teacher2Id) ks.add(`t|${e.teacher2Id}|${d}`)
+        if (sj) ks.add(`s|${e.classId}|${d}|${sj}`)
+      }
+      if (e.teacherId) ks.add(`i|${e.teacherId}`)
+      if (e.teacher2Id) ks.add(`i|${e.teacher2Id}`)
+    }
+    return ks
+  }
+  const scoreOf = (ks: Set<string>): number => {
+    let c = 0
+    for (const k of ks) {
+      const [kind, a, b, sj] = k.split('|')
+      if (kind === 'c') c += classDayGap(a, +b) * 2
+      else if (kind === 't') c += teacherDayGap(a, +b)
+      else if (kind === 'i') c += teacherLoadImbalance(a) * 0.3
+      else if (kind === 's') {
+        const n = subjectDaySpread(a, +b, sj)
+        if (n > 1) c += (n - 1) * 3
+      }
+    }
+    return c
+  }
+  const snapshotPos = () => new Map(entries.map((e) => [e.id, [e.day, e.slot] as [number, number]]))
+  const restorePos = (snap: Map<string, [number, number]>) => {
+    for (const e of entries) {
+      const p = snap.get(e.id)
+      if (p) {
+        e.day = p[0]
+        e.slot = p[1]
+      }
+    }
+  }
+
+  /** Swap: e (fromDay -> toDay) ko'chganda sinfning toDay dagi darslari chegaradan oshmasin (e va sherik hisobdan tashqari) */
+  const classDayCapOkSwap = (e: TimetableEntry, fromDay: number, toDay: number, partner: TimetableEntry): boolean => {
+    if (maxClassDay <= 0 || fromDay === toDay) return true
+    const cnt = entries.filter((o) => o.classId === e.classId && o.id !== e.id && o.id !== partner.id && o.day === toDay).length
+    // sherik ham shu sinfdan bo'lsa va toDay dan fromDay ga o'tayotgan bo'lsa — u ham hisobdan chiqadi; aks holda e qo'shiladi
+    return cnt + 1 <= maxClassDay
+  }
 
   /** Swap uchun: ikki entry'ni bir-birining joyiga qo'yish mumkinmi */
   const canSwapEntries = (e1: TimetableEntry, e2: TimetableEntry): boolean => {
@@ -1236,6 +1325,7 @@ export function improveTimetable(
     if (ok) {
       for (const tid of [e1.teacherId, e1.teacher2Id]) if (tid && !teacherAllowed(tid, od2, op2)) { ok = false; break }
       if (ok && !classAllowed(e1.classId, od2, op2)) ok = false
+      if (ok && (!subjectOrRoomOpen(e1, od2, op2) || !classDayCapOkSwap(e1, od1, od2, e2))) ok = false
     }
     // e2 yangi joyida free?
     if (ok) {
@@ -1251,6 +1341,7 @@ export function improveTimetable(
       if (ok) {
         for (const tid of [e2.teacherId, e2.teacher2Id]) if (tid && !teacherAllowed(tid, od1, op1)) { ok = false; break }
         if (ok && !classAllowed(e2.classId, od1, op1)) ok = false
+        if (ok && (!subjectOrRoomOpen(e2, od1, op1) || !classDayCapOkSwap(e2, od2, od1, e1))) ok = false
       }
     }
     // Qaytarish
@@ -1259,136 +1350,66 @@ export function improveTimetable(
     return ok
   }
 
+  const T0 = 0.9 // jarima shkalasiga mos (oyna = 1-2 ball); eski 4.0 yaxshi jadvalni buzib yuborardi
+  const Tmin = 0.02
+  const coolRate = Math.pow(Tmin / T0, 1 / N)
+  let T = T0
+  let cum = 0
+  let bestCum = 0
+  let bestSnap = snapshotPos()
+
   for (let it = 0; it < N; it++) {
-    if (it % 120 === 0) onProgress?.(5 + (it / N) * 92, `Yaxshilanmoqda... ${Math.round((it / N) * 100)}%`)
-    if (it > 0 && it % snapEvery === 0) onSnapshot?.(buildVersion())
+    if (it % 200 === 0) onProgress?.(5 + (it / N) * 92, `Yaxshilanmoqda... ${Math.round((it / N) * 100)}%`)
+    if (it > 0 && it % snapEvery === 0 && cum <= bestCum + 1e-9) onSnapshot?.(buildVersion())
     if (movable.length === 0) break
 
     const e = movable[Math.floor(rng() * movable.length)]
-    if (e.locked) { T *= coolRate; continue }
     const od = e.day
     const op = e.slot
-    const t1 = e.teacherId
-    const t2 = e.teacher2Id
     const subjOfE = lessonById.get(e.lessonId)?.subjectId
 
-    // Uch strategiya: oddiy ko'chirish, cross-day swap, yuk balanslash
-    const strategy = rng()
-
-    if (strategy < 0.2 && movable.length > 1) {
-      // === Cross-day swap: ikki darsni kunlar orasida almashish ===
+    if (rng() < 0.35 && movable.length > 1) {
+      // === Almashtirish (swap): ikki darsning joyini almashtirish ===
       const e2 = movable[Math.floor(rng() * movable.length)]
-      if (e2.id === e.id || e2.locked) { T *= coolRate; continue }
-      // Spread saqlash
+      if (e2.id === e.id) { T *= coolRate; continue }
+      const od2 = e2.day
+      const op2 = e2.slot
+      if (od === od2 && op === op2) { T *= coolRate; continue }
       const subj2 = lessonById.get(e2.lessonId)?.subjectId
-      if (subjOfE && e2.day !== od && subjectDaySpread(e.classId, e2.day, subjOfE) > 0) { T *= coolRate; continue }
-      if (subj2 && od !== e2.day && subjectDaySpread(e2.classId, od, subj2) > 0) { T *= coolRate; continue }
-
+      if (subjOfE && od2 !== od && subjectDaySpread(e.classId, od2, subjOfE) > 0) { T *= coolRate; continue }
+      if (subj2 && od !== od2 && subjectDaySpread(e2.classId, od, subj2) > 0) { T *= coolRate; continue }
       if (!canSwapEntries(e, e2)) { T *= coolRate; continue }
-
-      const before = entryCost(e) + entryCost(e2)
-      const od2 = e2.day; const op2 = e2.slot
+      const keys = keysFor([e, e2], od === od2 ? [od] : [od, od2])
+      const before = scoreOf(keys) + slotTerm(e) + slotTerm(e2)
       e.day = od2; e.slot = op2
       e2.day = od; e2.slot = op
-      const after = entryCost(e) + entryCost(e2)
-      const delta = after - before
-      const accept = delta < 0 || rng() < Math.exp(-delta / Math.max(T, 0.001))
-      if (!accept) { e.day = od; e.slot = op; e2.day = od2; e2.slot = op2 }
-
-    } else if (strategy < 0.35) {
-      // === Yuk balanslash: o'qituvchini eng kam yukli kunga ko'chirish ===
-      let minLoad = Infinity; let bestDayForBalance = od
-      for (let dd = 0; dd < days; dd++) {
-        if (dd === od) continue
-        const load = teacherDayLoadCount(t1, dd)
-        if (load < minLoad) { minLoad = load; bestDayForBalance = dd }
-      }
-      if (bestDayForBalance === od) { T *= coolRate; continue }
-      // Spread saqlash
-      if (subjOfE && subjectDaySpread(e.classId, bestDayForBalance, subjOfE) > 0) { T *= coolRate; continue }
-      // Shu kundan bo'sh slot topish
-      let bestP = 0; let bestCost = Infinity
-      for (let p2 = 1; p2 <= maxP; p2++) {
-        if (!free(e, bestDayForBalance, p2)) continue
-        e.day = bestDayForBalance; e.slot = p2
-        const c = entryCost(e)
-        e.day = od; e.slot = op
-        if (c < bestCost) { bestCost = c; bestP = p2 }
-      }
-      if (bestP === 0) { T *= coolRate; continue }
-      const before = entryCost(e)
-      e.day = bestDayForBalance; e.slot = bestP
-      const after = entryCost(e)
-      const delta = after - before
-      const accept = delta < 0 || rng() < Math.exp(-delta / Math.max(T, 0.001))
-      if (!accept) { e.day = od; e.slot = op }
-
-    } else if (it < N * 0.6) {
-      // === SA: tasodifiy slotga ko'chirish ===
+      const delta = scoreOf(keys) + slotTerm(e) + slotTerm(e2) - before
+      if (delta < 0 || rng() < Math.exp(-delta / Math.max(T, 0.001))) cum += delta
+      else { e.day = od; e.slot = op; e2.day = od2; e2.slot = op2 }
+    } else {
+      // === Ko'chirish (relocate): darsni boshqa bo'sh katakka o'tkazish ===
       const d2 = Math.floor(rng() * days)
       const p2 = 1 + Math.floor(rng() * maxP)
       if (d2 === od && p2 === op) { T *= coolRate; continue }
-      if (
-        d2 !== od && subjOfE &&
-        entries.some(
-          (o) => o.id !== e.id && o.classId === e.classId && o.day === d2 && lessonById.get(o.lessonId)?.subjectId === subjOfE,
-        )
-      ) { T *= coolRate; continue }
+      if (d2 !== od && subjOfE && subjectDaySpread(e.classId, d2, subjOfE) > 0) { T *= coolRate; continue }
       if (!free(e, d2, p2)) { T *= coolRate; continue }
-      const before = entryCost(e)
+      const keys = keysFor([e], d2 === od ? [od] : [od, d2])
+      const before = scoreOf(keys) + slotTerm(e)
       e.day = d2; e.slot = p2
-      const after = entryCost(e)
-      const delta = after - before
-      const accept = delta < 0 || rng() < Math.exp(-delta / Math.max(T, 0.001))
-      if (!accept) { e.day = od; e.slot = op }
-
-    } else {
-      // === Greedy phase: eng yaxshi slotni topish ===
-      let best: { d: number; p: number } | null = null
-      let bestDelta = 0
-      const currentCost = entryCost(e)
-      for (let d2 = 0; d2 < days; d2++) {
-        if (
-          d2 !== od && subjOfE &&
-          entries.some(
-            (o) => o.id !== e.id && o.classId === e.classId && o.day === d2 && lessonById.get(o.lessonId)?.subjectId === subjOfE,
-          )
-        ) continue
-        for (let p2 = 1; p2 <= maxP; p2++) {
-          if (d2 === od && p2 === op) continue
-          if (!free(e, d2, p2)) continue
-          e.day = d2; e.slot = p2
-          const newCost = entryCost(e)
-          e.day = od; e.slot = op
-          const delta = newCost - currentCost
-          if (delta < bestDelta) { bestDelta = delta; best = { d: d2, p: p2 } }
-        }
-      }
-      if (best) { e.day = best.d; e.slot = best.p }
+      const delta = scoreOf(keys) + slotTerm(e) - before
+      if (delta < 0 || rng() < Math.exp(-delta / Math.max(T, 0.001))) cum += delta
+      else { e.day = od; e.slot = op }
     }
 
-    // Eng yaxshi topilgan konfiguratsiyani eslab qolamiz
-    if (it % 50 === 0) {
-      let s = 0
-      for (const t of teachers) for (let d = 0; d < days; d++) s += teacherDayGap(t.id, d)
-      const cids = new Set(entries.map((e) => e.classId))
-      for (const cid of cids) for (let d = 0; d < days; d++) s += classDayGap(cid, d)
-      for (const t of teachers) s += teacherLoadImbalance(t.id) * 0.3
-      if (s < bestScore) { bestScore = s; bestEntries = entries.map((x) => ({ ...x })) }
+    if (cum < bestCum - 1e-9) {
+      bestCum = cum
+      bestSnap = snapshotPos()
     }
     T *= coolRate
   }
 
-  // SA oxirida eng yaxshi topilgan natijani tiklaymiz (agar hozirgi undan yomonroq bo'lsa)
-  let finalScore = 0
-  for (const t of teachers) for (let d = 0; d < days; d++) finalScore += teacherDayGap(t.id, d)
-  const finalCids = new Set(entries.map((e) => e.classId))
-  for (const cid of finalCids) for (let d = 0; d < days; d++) finalScore += classDayGap(cid, d)
-  for (const t of teachers) finalScore += teacherLoadImbalance(t.id) * 0.3
-  if (finalScore > bestScore) {
-    entries.length = 0
-    for (const be of bestEntries) entries.push(be)
-  }
+  // Oxirida eng yaxshi topilgan holat tiklanadi (yaxshilanish topilmasa — boshlang'ich jadval o'zgarishsiz)
+  if (cum > bestCum + 1e-9) restorePos(bestSnap)
 
   onProgress?.(100, 'Tayyor!')
   return buildVersion()

@@ -29,8 +29,25 @@ def _ensure_owner_account() -> None:
         db.commit()
 
 
+def _assert_safe_config() -> None:
+    """Production (DEBUG=false) rejimida standart (taxmin qilinadigan) sirlar bilan ishga tushmaymiz."""
+    if settings.debug:
+        return
+    unsafe = []
+    if settings.secret_key == "dev-secret-change-me":
+        unsafe.append("SECRET_KEY")
+    if settings.owner_password == "admin123":
+        unsafe.append("OWNER_PASSWORD")
+    if unsafe:
+        raise RuntimeError(
+            "DEBUG=false rejimida standart qiymatlar mumkin emas — quyidagilarni muhit o'zgaruvchisida sozlang: "
+            + ", ".join(unsafe)
+        )
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    _assert_safe_config()
     init_db()
     _ensure_owner_account()
     yield

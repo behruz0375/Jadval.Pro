@@ -27,6 +27,10 @@ services:
         value: "true"  # saytdan hech kim o'zini admin/zavuch deb ro'yxatdan o'tolmaydi
       - key: VITE_API_URL
         value: https://jadvalpro-api.onrender.com  # bulut backend URL (login va sinxron uchun)
+      - key: VITE_ADMIN_TELEGRAM
+        sync: false  # admin Telegram (@username yoki https://t.me/...) — mijozlar "Adminga yozish" uchun; dashboard'da kiriting
+      - key: VITE_ADMIN_PHONE
+        sync: false  # admin telefoni (ixtiyoriy)
     routes:
       - type: rewrite
         source: /*

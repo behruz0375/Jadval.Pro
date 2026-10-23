@@ -125,6 +125,9 @@ interface AuthState {
 
   // Maktab hodimlari (Direktor / O'TIBDO')
   setupDirector: (login: string, password: string) => Promise<string | null>
+  /** Ommaviy (onrender.com) sayt: Zavuch login/paroli SERVERDA tasdiqlangandan keyin shu qurilmada mahalliy hisob
+   *  yaratiladi (keyingi kirishlar oflayn ham ishlaydi) va Zavuch sifatida kiriladi. */
+  enrollDirectorFromCloud: (login: string, password: string) => Promise<string | null>
   staffLogin: (role: StaffRole, login: string, password: string) => Promise<string | null>
   staffChangeCredentials: (
     role: StaffRole,
@@ -438,6 +441,23 @@ export const useAuth = create<AuthState>()(
         return null
       },
 
+      enrollDirectorFromCloud: async (login, password) => {
+        if (!login.trim()) return 'Login kiriting'
+        if (password.length < 4) return "Parol kamida 4 belgi bo'lsin"
+        const cred = await makeCred(login.trim(), password)
+        const rec: StaffCred = {
+          ...cred,
+          machineSeal: get().machineCode,
+          active: true,
+          createdAt: new Date().toISOString(),
+        }
+        set((s) => ({ staff: { ...s.staff, director: rec } }))
+        await useProject.getState().switchScope(`staff:${login.toLowerCase().trim()}`)
+        set({ role: 'director' })
+        get().logAudit('Kirish (server orqali)', 'Zavuch: ' + login.trim())
+        return null
+      },
+
       staffLogin: async (role, login, password) => {
         const cred = get().staff[role]
         if (!cred) {
@@ -478,6 +498,14 @@ export const useAuth = create<AuthState>()(
         if (newPassword !== undefined && newPassword.length > 0 && newPassword.length < 4)
           return "Yangi parol kamida 4 belgi bo'lsin"
         const next = await makeCred(newLogin, newPassword || currentPassword)
+        // Zavuch logini o'zgarsa — maktab ma'lumoti (scope) ham yangi loginga ko'chiriladi, aks holda "yo'qolib" qoladi
+        if (role === 'director' && !sameLogin(cred.login, newLogin)) {
+          const from = `staff:${cred.login.toLowerCase().trim()}`
+          const to = `staff:${newLogin.toLowerCase().trim()}`
+          const proj = useProject.getState()
+          if (await proj.scopeExists(to)) return 'Bu login band — boshqa login tanlang'
+          await proj.renameScope(from, to)
+        }
         set((s) => ({ staff: { ...s.staff, [role]: { ...cred, ...next } } }))
         return null
       },

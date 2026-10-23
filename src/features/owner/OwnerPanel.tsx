@@ -43,6 +43,24 @@ import { ProBadge } from '@/features/pro/ProBadge'
 import { validateProject } from '@/engine/validate'
 import type { Project } from '@/types'
 import type { ValidationResult } from '@/engine/validate'
+import { IS_PUBLIC_DEPLOY } from '@/constants'
+import {
+  listCustomers,
+  createCustomer as cloudCreateCustomer,
+  updateCustomer as cloudUpdateCustomer,
+  deleteCustomer as cloudDeleteCustomer,
+  isCloudSignedIn,
+  cloudErrorMessage,
+  type CloudCustomer,
+} from '@/features/cloud/api'
+
+const normLogin = (l?: string | null) => (l ?? '').trim().toLowerCase()
+
+/** Ommaviy saytda mijoz serverda ham yuritiladi (Zavuch hisobi shu yerda ochiladi): logini bo'yicha topamiz */
+async function findCloudCustomer(login?: string | null): Promise<CloudCustomer | undefined> {
+  if (!login) return undefined
+  return (await listCustomers()).find((c) => normLogin(c.login) === normLogin(login))
+}
 
 interface TemplateRecord {
   id: string
@@ -97,6 +115,31 @@ export function OwnerPanel() {
     const key = plan === 'Pro' ? (proKey.trim() || generateProKey()) : ''
     const expiry = plan === 'Pro' && expiresAt ? new Date(expiresAt).toISOString() : undefined
     const isNew = !editId
+    const oldLogin = editId ? schools.find((x) => x.licenseId === editId)?.login : undefined
+    // Ommaviy sayt: avval serverda Zavuch hisobini yaratamiz/yangilaymiz (login butun tizimda yagona).
+    if (IS_PUBLIC_DEPLOY) {
+      if (!isCloudSignedIn()) return toast.error('Server bilan ulanmagansiz — admin sifatida qayta kiring')
+      try {
+        const existing = await findCloudCustomer(editId ? oldLogin : login)
+        const body = {
+          name: schoolName,
+          director,
+          phone,
+          region: existing?.region ?? undefined,
+          login,
+          password_plain: password,
+          plan,
+          notes,
+          active: existing?.active ?? true,
+          expires_at: expiry ?? existing?.expires_at ?? null,
+        }
+        if (isNew && existing) return toast.error('Bu login serverda allaqachon band — boshqa login tanlang')
+        if (existing && !isNew) await cloudUpdateCustomer(existing.id, body)
+        else await cloudCreateCustomer(body)
+      } catch (e) {
+        return toast.error(cloudErrorMessage(e))
+      }
+    }
     if (editId) {
       const err = updateCustomer(editId, { schoolName, director, phone, login, password, notes, plan, key, ...(expiry ? { expiresAt: expiry } : {}) })
       if (err) return toast.error(err)
@@ -111,16 +154,23 @@ export function OwnerPanel() {
       }
       toast.success(plan === 'Pro' ? `Yangi Pro mijoz saqlandi. Kalit: ${key}` : 'Yangi mijoz saqlandi')
     }
-    // MUHIM: shu qurilmada direktor hisobini ham sozlab beramiz —
-    // admin chiqib → Zavuch bo'lib kirib testlab ko'ra oladi (scope o'zgartirmaydi).
-    const perr = await provisionDirectorHere(login, password)
-    if (perr) {
-      toast.error('Direktor hisobini sozlashda xato: ' + perr)
+    // Login o'zgargan bo'lsa — shu qurilmadagi mijoz ma'lumoti ham yangi loginga ko'chadi (yo'qolib qolmasin)
+    if (oldLogin && normLogin(oldLogin) !== normLogin(login)) {
+      await useProject.getState().renameScope(`staff:${normLogin(oldLogin)}`, `staff:${normLogin(login)}`)
     }
-    // Yangi mijoz uchun — scope'ini tozalaymiz. Shu bilan admin'ning avvalgi
-    // "oqib ketgan" ma'lumotlari (sinflar/o'qituvchilar/fanlar) bu mijozga ko'rinmaydi.
-    if (isNew) {
-      await useProject.getState().resetScope(`staff:${login.toLowerCase().trim()}`)
+    // Desktop rejimi: shu qurilmada direktor hisobini ham sozlab beramiz —
+    // admin chiqib → Zavuch bo'lib kirib testlab ko'ra oladi (scope o'zgartirmaydi).
+    // Ommaviy saytda mijoz serverdagi hisob bilan o'z qurilmasidan kiradi — mahalliy sozlash kerak emas.
+    if (!IS_PUBLIC_DEPLOY) {
+      const perr = await provisionDirectorHere(login, password)
+      if (perr) {
+        toast.error('Direktor hisobini sozlashda xato: ' + perr)
+      }
+      // Yangi mijoz uchun — scope'ini tozalaymiz. Shu bilan admin'ning avvalgi
+      // "oqib ketgan" ma'lumotlari (sinflar/o'qituvchilar/fanlar) bu mijozga ko'rinmaydi.
+      if (isNew) {
+        await useProject.getState().resetScope(`staff:${login.toLowerCase().trim()}`)
+      }
     }
     reset()
     setOpen(false)
@@ -169,7 +219,9 @@ export function OwnerPanel() {
     const proBlock = isPro
       ? `\n\n🔑 PRO AKTIVATSIYA KALITI:\n${s.key}\n\nDastur Sozlamalar → Pro versiya kartasiga yozib "Aktivlash" bosing — barcha Pro imkoniyatlar ochiladi.`
       : ''
-    const msg = `Assalomu alaykum! JadvalPro dasturi uchun login/parolingiz:\n\nLogin: ${s.login}\nParol: ${s.password}\n\nDastur ichida Zavuch (direktor) sifatida kiring va shu ma'lumotlarni «Birinchi kirish» oynasiga kiriting.${proBlock}`
+    const msg = `Assalomu alaykum! JadvalPro dasturi uchun login/parolingiz:\n\nLogin: ${s.login}\nParol: ${s.password}\n\n${IS_PUBLIC_DEPLOY ? `Sayt: ${window.location.origin}
+
+Saytda «Zavuch» ni tanlab, shu login va parol bilan kiring.` : "Dastur ichida Zavuch (direktor) sifatida kiring va shu ma'lumotlarni «Birinchi kirish» oynasiga kiriting."}${proBlock}`
     navigator.clipboard.writeText(msg).then(() => {
       toast.success(isPro ? 'Login, parol va Pro kalit nusxalandi' : 'Login va parol xabari nusxalandi')
     }).catch(() => { /* ignore */ })
@@ -177,6 +229,38 @@ export function OwnerPanel() {
     if (!tg) return
     const url = tg.startsWith('http') ? tg : `https://t.me/${tg.replace(/^@/, '').replace(/^t\.me\//, '')}`
     window.open(url, '_blank')
+  }
+
+  /** Bloklash/ochish: ommaviy saytda serverdagi Zavuch hisobi ham bloklanadi (aks holda mijoz baribir kira oladi) */
+  const toggleBlocked = async (licenseId: string) => {
+    const s = schools.find((x) => x.licenseId === licenseId)
+    if (!s) return
+    if (IS_PUBLIC_DEPLOY && isCloudSignedIn() && s.login) {
+      try {
+        const c = await findCloudCustomer(s.login)
+        if (c) await cloudUpdateCustomer(c.id, { ...c, active: s.blocked })
+      } catch (e) {
+        return toast.error(cloudErrorMessage(e))
+      }
+    }
+    setSchoolBlocked(licenseId, !s.blocked)
+  }
+
+  const doDelete = async () => {
+    const id = delId
+    if (!id) return
+    const s = schools.find((x) => x.licenseId === id)
+    if (IS_PUBLIC_DEPLOY && isCloudSignedIn() && s?.login) {
+      try {
+        const c = await findCloudCustomer(s.login)
+        if (c) await cloudDeleteCustomer(c.id)
+      } catch (e) {
+        return toast.error(cloudErrorMessage(e))
+      }
+    }
+    removeSchool(id)
+    setDelId(null)
+    toast.success("O'chirildi")
   }
 
   const filtered = schools.filter((s) =>
@@ -445,7 +529,7 @@ export function OwnerPanel() {
                     <Pencil size={13} />
                   </button>
                   <button
-                    onClick={() => setSchoolBlocked(s.licenseId, !s.blocked)}
+                    onClick={() => toggleBlocked(s.licenseId)}
                     className={cx('btn hover-lift h-8 flex-1 text-xs', s.blocked ? 'btn-accent' : 'btn-outline')}
                   >
                     {s.blocked ? <><CircleCheck size={13} /> Ochish</> : <><Ban size={13} /> Bloklash</>}
@@ -557,7 +641,7 @@ export function OwnerPanel() {
         footer={
           <>
             <button onClick={() => setDelId(null)} className="btn btn-outline">Bekor</button>
-            <button onClick={() => { if (delId) removeSchool(delId); setDelId(null); toast.success("O'chirildi") }} className="btn btn-danger">
+            <button onClick={doDelete} className="btn btn-danger">
               O'chirish
             </button>
           </>

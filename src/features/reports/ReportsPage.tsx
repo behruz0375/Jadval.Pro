@@ -14,11 +14,12 @@ import { useProject } from '@/store/project'
 import { classLoad, teacherLoad, subjectLoad } from '@/features/_shared/compute'
 import { DAYS_UZ } from '@/constants'
 import type { LucideIcon } from 'lucide-react'
+import { currentVersion } from '@/features/_shared/versions'
 
 export function ReportsPage() {
   const project = useProject((s) => s.project)
   const { classes, subjects, rooms, teachers, lessons, school } = project
-  const version = project.timetables[project.timetables.length - 1] ?? null
+  const version = currentVersion(project.timetables)
 
   const totalHours = lessons.reduce((a, l) => a + l.hoursPerWeek, 0)
 

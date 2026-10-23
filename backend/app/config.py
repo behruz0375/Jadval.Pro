@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     cors_origin_regex: str | None = None
     owner_login: str = "admin"
     owner_password: str = "admin123"
+    # Ochiq ro'yxatdan o'tish (POST /api/auth/register). Standart YOPIQ: login/parolni admin beradi
+    # (POST /api/customers). Faqat sinov/ichki ishlatish uchun yoqiladi; baribir faqat "director" roli ochiladi.
+    allow_public_registration: bool = False
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -18,6 +18,8 @@ import { understand, rememberContext, resolveEntity, extractDay } from './offlin
 import { searchKnowledgeMulti } from './knowledge'
 import { runLLMTurn, type LLMConfig, type LLMHooks } from './llm'
 import { useAIChat } from './chatStore'
+import { currentVersion } from '@/features/_shared/versions'
+import { autoRaiseMaxLessons } from '@/features/_shared/shiftFix'
 
 export interface ExecOutcome {
   ok: boolean
@@ -59,6 +61,7 @@ export function useAIEngine() {
       newProject: () => P().newProject(),
       markSaved: () => P().markSaved(),
       addTimetable: (v) => P().addTimetable(v),
+      addGeneratedTimetable: (v) => P().addGeneratedTimetable(v),
       updateTimetable: (id, patch) => P().updateTimetable(id, patch),
       removeTimetable: (id) => P().removeTimetable(id),
       setActivePanel: (id) => U().setActivePanel(id),
@@ -67,13 +70,14 @@ export function useAIEngine() {
       setLang: (l) => L().setLang(l),
       back: () => U().back(),
       generate: (opts, prog) => {
+        autoRaiseMaxLessons()
         const h = runGenerateAsync(P().project, opts, prog ?? onProgress)
         genHandle.current = h
         return h.promise.finally(() => { if (genHandle.current === h) genHandle.current = null })
       },
       improve: (prog) => {
         const proj = P().project
-        const latest = proj.timetables[proj.timetables.length - 1]
+        const latest = currentVersion(proj.timetables)
         const h = runImproveAsync(proj, latest?.entries ?? [], { seed: Math.floor(Math.random() * 1e9), minimizeGaps: true }, prog ?? onProgress)
         genHandle.current = h
         return h.promise.finally(() => { if (genHandle.current === h) genHandle.current = null })
@@ -82,7 +86,7 @@ export function useAIEngine() {
       openProject: () => openProjectFromFile(),
       exportData: async (format): Promise<string> => {
         const proj = P().project
-        const latest = proj.timetables[proj.timetables.length - 1]
+        const latest = currentVersion(proj.timetables)
         if (format === 'excel') { await exportDataToExcel(proj); return '✓ Ma\'lumotlar Excel faylga eksport qilindi.' }
         if (format === 'pdf') { await exportDataPdf(proj); return '✓ Ma\'lumotlar PDF faylga eksport qilindi.' }
         if (format === 'csv') {

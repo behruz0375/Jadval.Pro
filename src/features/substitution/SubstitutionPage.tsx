@@ -3,11 +3,12 @@ import { Replace, UserX, Printer, CheckCircle2, CalendarX } from 'lucide-react'
 import { useProject } from '@/store/project'
 import { DAYS_UZ, DAYS_SHORT } from '@/constants'
 import { cx } from '@/utils'
+import { currentVersion } from '@/features/_shared/versions'
 
 export function SubstitutionPage() {
   const project = useProject((s) => s.project)
   const { school, classes, subjects, rooms, teachers, lessons, timetables } = project
-  const version = timetables[timetables.length - 1] ?? null
+  const version = currentVersion(timetables)
 
   const [day, setDay] = useState(0)
   const [absentId, setAbsentId] = useState<string>(teachers[0]?.id ?? '')

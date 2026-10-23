@@ -5,6 +5,7 @@
 // ============================================================
 import type { Project } from '@/types'
 import { newClass, newSubject, newTeacher, newLesson } from '@/data/factories'
+import { countHardViolations, timetableGaps } from '@/features/_shared/compute'
 
 export interface SheetData {
   name: string
@@ -37,7 +38,19 @@ export interface ImportSummary {
   lessons: number
   /** Mavjud darslar yangilandi (soat o'zgartirildi yoki o'qituvchi tayinlandi) */
   updated: number
+  /** Fayldagi bilan bir xil bo'lgani uchun o'zgarmagan darslar */
+  unchanged: number
+  /** Taqsimotda yo'q bo'lgani uchun olib tashlangan eski darslar (faqat almashtirish rejimida) */
+  removed: number
+  /** Olib tashlanadigan darslar: "5-A · Fizika · Aliyev V. (2 soat)" ko'rinishida (oldindan ko'rsatish uchun) */
+  removedLabels: string[]
   hours: number
+}
+
+export interface ApplyOptions {
+  /** true (standart): taqsimotda qatnashgan sinflar uchun shu fayl asos bo'ladi — fayldan tashqari
+   *  eski (bir sinfli) darslar olib tashlanadi. false: faqat qo'shish/yangilash. */
+  replace?: boolean
 }
 
 const s = (v: unknown) => String(v ?? '').trim()
@@ -82,8 +95,9 @@ function normalizeClassName(raw: string): string {
 const TEACHER_RE = /f\.?\s*i\.?\s*(sh|o)?|familiya|o'?qituv|ustoz|муаллим|учител|ф\.?и\.?о|teacher|преподават/i
 const SUBJECT_RE = /^fan|fani|predmet|dars nomi|предмет|subject|дисциплин/i
 const SKIP_HEADER_RE = /^(jami|jami soat|umumiy|umumiy soat|soat|soat soni|yillik|yillik soat|yillik soati|summa|итог|всего|всего часов|stavka|stavkasi|soni|total|haftaga|хафтага|#|№|no\.?|t\/r|t\.r\.|nomer|номер|row|строка|р\/с|р\.с\.|tartib|tartib raqami)$/i
-/** Qatorda bu matn bo'lsa — o'qituvchi emas, umumlashtirilgan qator */
-const SKIP_ROW_RE = /^(jami|umumiy|итог|всего|total|сумм)/i
+/** Qatorda bu matn bo'lsa — o'qituvchi emas, umumlashtirilgan qator.
+ *  So'z oxirigacha tekshiriladi: "Jami", "Jami soat" — ha; "Jamilova", "Jamila Karimova" (ism-familiya) — yo'q. */
+const SKIP_ROW_RE = /^(jami|umumiy|итог\p{L}*|всего|total|сумм\p{L}*)(?![\p{L}])/iu
 
 /** Excel faylni varaqlarga o'qish (SheetJS dinamik import) */
 export async function readSheets(file: File): Promise<SheetData[]> {
@@ -387,19 +401,45 @@ export function pickBestSheet(sheets: SheetData[]): SheetData | null {
  *  Bular hech qachon haqiqiy sinf nomi bo'lmaydi — ularni import jarayonida chetlab o'tamiz. */
 const INVALID_CLASS_NAME_RE = /^(#|№|n|no\.?|t\/r|t\.r\.|nomer|номер|row|строка|р\/с|р\.с\.|tartib|xona|xonalar|room|каб|каб\.|кабинет|-|—|–|\.|,|\s*)$/i
 export const isInvalidClassName = (name: string): boolean => INVALID_CLASS_NAME_RE.test((name || '').trim())
+/** Sinf noma'qulmi: nomi ("#", "Xona"...) yoki — bo'sh bo'lmasa — qisqacha nomi. Bo'sh "Qisqacha" noma'qul EMAS. */
+export const isInvalidClass = (c: { name: string; short?: string }): boolean =>
+  isInvalidClassName(c.name) || (!!(c.short ?? '').trim() && isInvalidClassName(c.short as string))
 
 /** Import natijasini loyihaga qo'llash (mavjudlarini topib yoki yaratib).
  *  Qayta-import xavfsiz: mavjud darslar soatlari qo'shilmaydi, aksincha import qiymati bilan
- *  yangilanadi (shu bilan 2 marta import qilsangiz, soatlar 2 barobar bo'lib ketmaydi). */
-export function applyImport(parsed: Parsed, project: Project): { project: Project; summary: ImportSummary } {
+ *  yangilanadi (shu bilan 2 marta import qilsangiz, soatlar 2 barobar bo'lib ketmaydi).
+ *  Almashtirish rejimida (standart) taqsimot asos bo'ladi: fayldagi sinflarning fayldan tashqari
+ *  eski darslari olib tashlanadi va ularning jadval yozuvlari ham tozalanadi. */
+export function applyImport(
+  parsed: Parsed,
+  project: Project,
+  opts: ApplyOptions = {},
+): { project: Project; summary: ImportSummary } {
+  const replace = opts.replace ?? true
   const classes = [...project.classes]
   const subjects = [...project.subjects]
   const teachers = [...project.teachers]
   const lessons = [...project.lessons]
-  const summary: ImportSummary = { classes: 0, subjects: 0, teachers: 0, lessons: 0, updated: 0, hours: 0 }
+  const summary: ImportSummary = {
+    classes: 0,
+    subjects: 0,
+    teachers: 0,
+    lessons: 0,
+    updated: 0,
+    unchanged: 0,
+    removed: 0,
+    removedLabels: [],
+    hours: 0,
+  }
   /** Shu import davomida yaratilgan yoki yangilangan dars ID'lari (bir xil fayldagi takroriy
    *  qatorlarda soatlar to'g'ri jamlanishi uchun). */
   const touchedInThisBatch = new Set<string>()
+  /** Shu import yaratgan yangi darslar */
+  const createdIds = new Set<string>()
+  /** Import boshidagi darslar (yangilandimi yoki o'zgarishsizmi — oxirida solishtiriladi) */
+  const originalById = new Map(project.lessons.map((l) => [l.id, l]))
+  /** Faylda kamida 1 soat bilan qatnashgan sinflar — faqat shularning darslari almashtiriladi */
+  const syncedClassIds = new Set<string>()
 
   // Noma'qul sinf nomlarini chetlab o'tamiz (masalan "#", "Xona", "№" avvalgi bug'li importdan)
   const validClassNames = parsed.classNames.filter(cn => !isInvalidClassName(cn))
@@ -426,8 +466,13 @@ export function applyImport(parsed: Parsed, project: Project): { project: Projec
     }
   }
 
+  /** Eski dars sozlamalarini (xona, juft dars, qadalgan joy...) bir marta merosga beradigan "donor" darslar */
+  const donorsUsed = new Set<string>()
+
   for (const row of parsed.rows) {
     if (!row.subject) continue
+    // Faqat noma'qul sinflarda soat bo'lgan qatordan fan/o'qituvchi yaratmaymiz
+    if (!Object.values(row.hours).some((h) => h > 0)) continue
     let subj = findSubj(row.subject)
     if (!subj) {
       subj = newSubject(project.school, row.subject, subjects.length)
@@ -451,8 +496,10 @@ export function applyImport(parsed: Parsed, project: Project): { project: Projec
     }
 
     for (const [cn, h] of Object.entries(row.hours)) {
+      if (!(h > 0)) continue
       const cls = findClass(cn)
       if (!cls) continue
+      syncedClassIds.add(cls.id)
       const existingIdx = lessons.findIndex(
         (l) =>
           l.subjectId === subj!.id &&
@@ -473,13 +520,11 @@ export function applyImport(parsed: Parsed, project: Project): { project: Projec
         } else {
           // Loyihada avvaldan mavjud bo'lgan dars — soatni ALMASHTIRAMIZ (qo'shmaymiz).
           // Shu bilan bir xil Excel'ni 2 marta import qilsangiz, soatlar duplicatelanmaydi.
-          const changed = existing.hoursPerWeek !== h || (teacherId && existing.teacher1Id !== teacherId)
           lessons[existingIdx] = {
             ...existing,
             hoursPerWeek: h,
             teacher1Id: teacherId || existing.teacher1Id,
           }
-          if (changed) summary.updated++
           touchedInThisBatch.add(existing.id)
         }
       } else {
@@ -488,15 +533,107 @@ export function applyImport(parsed: Parsed, project: Project): { project: Projec
         l.classIds = [cls.id]
         l.teacher1Id = teacherId
         l.hoursPerWeek = h
+        // O'qituvchi almashgan bo'lsa: eski dars (shu fan + sinf) olib tashlanadi, lekin uning
+        // sozlamalari (xona, juft dars, kunlik limit, qadalgan joy, 2-o'qituvchi) yangi darsga ko'chiriladi.
+        const donor = replace
+          ? lessons.find(
+              (x) =>
+                !touchedInThisBatch.has(x.id) &&
+                !donorsUsed.has(x.id) &&
+                x.subjectId === subj!.id &&
+                x.classIds.length === 1 &&
+                x.classIds[0] === cls.id,
+            )
+          : undefined
+        if (donor) {
+          donorsUsed.add(donor.id)
+          l.consecutive = donor.consecutive
+          l.maxPerDay = donor.maxPerDay
+          l.roomId = donor.roomId
+          l.teacher2Id = donor.teacher2Id
+          l.pinned = donor.pinned
+        }
         lessons.push(l)
         touchedInThisBatch.add(l.id)
+        createdIds.add(l.id)
         summary.lessons++
       }
       summary.hours += h
     }
   }
 
-  return { project: { ...project, classes, subjects, teachers, lessons }, summary }
+  // Avvaldan mavjud darslar: oxirgi holatini import boshidagi bilan solishtiramiz
+  for (const l of lessons) {
+    if (!touchedInThisBatch.has(l.id) || createdIds.has(l.id)) continue
+    const orig = originalById.get(l.id)
+    if (orig && orig.hoursPerWeek === l.hoursPerWeek && orig.teacher1Id === l.teacher1Id) summary.unchanged++
+    else summary.updated++
+  }
+
+  // Almashtirish rejimi: faylda qatnashgan sinflarning fayldan tashqari bir sinfli eski darslari
+  // (masalan, oldingi taqsimotdan qolganlari yoki ikki marta import qilinib qolgan dublikatlar) olib tashlanadi.
+  // Bir nechta sinfga biriktirilgan (birlashtirilgan) darslarga tegilmaydi.
+  const removedIds = new Set<string>()
+  let finalLessons = lessons
+  if (replace) {
+    finalLessons = lessons.filter((l) => {
+      const stale =
+        l.classIds.length === 1 && syncedClassIds.has(l.classIds[0]) && !touchedInThisBatch.has(l.id)
+      if (stale) {
+        removedIds.add(l.id)
+        const cn = classes.find((c) => c.id === l.classIds[0])?.name ?? '?'
+        const sn = subjects.find((x) => x.id === l.subjectId)?.name ?? '?'
+        const tn = teachers.find((t) => t.id === l.teacher1Id)?.short
+        summary.removedLabels.push(`${cn} · ${sn}${tn ? ' · ' + tn : ''} (${l.hoursPerWeek} soat)`)
+      }
+      return !stale
+    })
+    summary.removed = removedIds.size
+  }
+
+  // Taqsimot o'qituvchi yuklamasining manbasi: faylda biriktirilgan soat haftalik normadan (standart 24) oshsa,
+  // norma shunga moslanadi — aks holda generator ortiqcha soatlarni jimgina joylamay qoldiradi.
+  const loadOf = new Map<string, number>()
+  for (const l of finalLessons) {
+    for (const tid of [l.teacher1Id, l.teacher2Id]) if (tid) loadOf.set(tid, (loadOf.get(tid) ?? 0) + l.hoursPerWeek)
+  }
+  const importedTeacherIds = new Set(
+    finalLessons.filter((l) => touchedInThisBatch.has(l.id)).flatMap((l) => [l.teacher1Id, l.teacher2Id]).filter(Boolean),
+  )
+  for (let i = 0; i < teachers.length; i++) {
+    const t = teachers[i]
+    const load = loadOf.get(t.id) ?? 0
+    if (importedTeacherIds.has(t.id) && t.weeklyMax > 0 && load > t.weeklyMax) teachers[i] = { ...t, weeklyMax: Math.ceil(load) }
+  }
+
+  // O'chirilgan darslarning jadvaldagi yozuvlari ham olib tashlanadi (fan rangisiz "yetim" kataklar qolmasin).
+  // Statistika jadval taxtasidagi (TimetableBoard.commit) formulalar bilan qayta hisoblanadi.
+  let timetables = project.timetables
+  if (removedIds.size > 0) {
+    const totalRequired = finalLessons.reduce((a, l) => a + l.hoursPerWeek * Math.max(1, l.classIds.length), 0)
+    timetables = project.timetables.map((v) => {
+      const entries = v.entries.filter((e) => !removedIds.has(e.lessonId))
+      if (entries.length === v.entries.length) return v
+      const { teacherGaps, classGaps } = timetableGaps(entries, teachers, project.school.workDays)
+      return {
+        ...v,
+        entries,
+        stats: {
+          ...v.stats,
+          placed: entries.length,
+          unplaced: Math.max(0, totalRequired - entries.length),
+          hardViolations: countHardViolations(entries),
+          softPenalty: classGaps * 2,
+          teacherGaps,
+        },
+      }
+    })
+  }
+
+  return {
+    project: { ...project, classes, subjects, teachers, lessons: finalLessons, timetables },
+    summary,
+  }
 }
 
 /** Ustun indeksini Excel harfiga aylantiradi (0 → A, 25 → Z, 26 → AA) */

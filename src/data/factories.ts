@@ -64,7 +64,7 @@ export function fillShiftTimes(
 }
 
 /** Navbat gridi: [dars 0..15][kun 0..5] */
-function makeShiftGrid(startLesson: number, lessonCount: number, workDays: number): boolean[][] {
+export function makeShiftGrid(startLesson: number, lessonCount: number, workDays: number): boolean[][] {
   const grid: boolean[][] = []
   for (let l = 0; l < MAX_LESSONS; l++) {
     const row: boolean[] = []

@@ -14,6 +14,7 @@ import type { Project, Teacher, SchoolClass, Subject, Room, Lesson } from '@/typ
 import type { ToolCall } from './parser'
 import { DAYS_UZ } from '@/constants'
 import { classLoad, teacherLoad, subjectLoad, countHardViolations } from '@/features/_shared/compute'
+import { currentVersion } from '@/features/_shared/versions'
 
 // ============================================================
 // 1. NORMALIZATSIYA — matnni bir xil ko'rinishga keltirish
@@ -325,7 +326,7 @@ export function answerAnalyticalQuestion(text: string, project: Project): NLUAns
 
   // "Jadval sifati" / statistika
   if (scores.stats > 0 || /sifat|качество|quality/.test(t)) {
-    const v = project.timetables[project.timetables.length - 1]
+    const v = currentVersion(project.timetables)
     if (!v) return { text: "Hali jadval tuzilmagan — avval 'jadval tuz' deng." }
     const total = v.stats.placed + v.stats.unplaced
     const hv = countHardViolations(v.entries)
@@ -362,7 +363,7 @@ export function answerAnalyticalQuestion(text: string, project: Project): NLUAns
 
   // "Konfliktlar"
   if (scores.conflict > 0) {
-    const v = project.timetables[project.timetables.length - 1]
+    const v = currentVersion(project.timetables)
     if (!v) return { text: "Jadval hali tuzilmagan." }
     const hv = countHardViolations(v.entries)
     if (hv === 0) return { text: "✓ Jadvalda qat'iy to'qnashuv yo'q — toza." }

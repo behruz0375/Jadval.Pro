@@ -38,3 +38,39 @@ def test_register_director_creates_school(client):
     body = r.json()
     assert body["user"]["role"] == "director"
     assert body["user"]["school_id"] is not None
+
+
+def test_register_cannot_create_owner(client):
+    for role in ("owner", "teacher", "student", "deputy"):
+        r = client.post(
+            "/api/auth/register",
+            json={"login": f"evil_{role}", "password": "pass1234", "role": role},
+        )
+        assert r.status_code == 403, (role, r.text)
+    r = client.post("/api/auth/login-json", json={"login": "evil_owner", "password": "pass1234"})
+    assert r.status_code == 401
+
+
+def test_register_closed_by_default(client):
+    from app.config import settings
+
+    settings.allow_public_registration = False
+    try:
+        r = client.post(
+            "/api/auth/register",
+            json={"login": "closed1", "password": "pass1234", "role": "director", "school_name": "X"},
+        )
+        assert r.status_code == 403
+        assert "admin" in r.json()["detail"].lower()
+    finally:
+        settings.allow_public_registration = True
+
+
+def test_login_is_case_insensitive_and_locks_after_failures(client):
+    r = client.post("/api/auth/login-json", json={"login": "  ADMIN ", "password": "admin-test"})
+    assert r.status_code == 200
+    for _ in range(5):
+        bad = client.post("/api/auth/login-json", json={"login": "lockme", "password": "wrong"})
+        assert bad.status_code == 401
+    locked = client.post("/api/auth/login-json", json={"login": "lockme", "password": "wrong"})
+    assert locked.status_code == 429

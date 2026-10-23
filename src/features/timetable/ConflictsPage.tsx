@@ -1,10 +1,12 @@
 import { AlertTriangle, CheckCircle2, UserX, Users, DoorOpen, CalendarX } from 'lucide-react'
 import { useProject } from '@/store/project'
 import { DAYS_SHORT } from '@/constants'
+import { teacherOffReason, teacherWorkableDays } from '@/engine/teacherDays'
 import { weekOverlap } from '@/utils'
 import { useT } from '@/i18n'
 import type { LucideIcon } from 'lucide-react'
 import type { WeekType } from '@/types'
+import { currentVersion } from '@/features/_shared/versions'
 
 interface Conflict {
   type: string
@@ -16,7 +18,7 @@ export function ConflictsPage() {
   const t = useT()
   const project = useProject((s) => s.project)
   const { timetables, teachers, classes, rooms, subjects, lessons, school } = project
-  const version = timetables[timetables.length - 1] ?? null
+  const version = currentVersion(timetables)
 
   if (!version) {
     return (
@@ -92,16 +94,47 @@ export function ConflictsPage() {
     }
   }
 
-  // Joylashmagan soatlar
+  // O'qituvchining metodik kuni yoki yopiq vaqtiga qo'yilgan darslar — qat'iy cheklov buzilishi
+  const offSeen = new Set<string>()
+  version.entries.forEach((e) => {
+    for (const tid of [e.teacherId, e.teacher2Id]) {
+      const te = tid ? teachers.find((x) => x.id === tid) : undefined
+      if (!te) continue
+      const why = teacherOffReason(te, e.day, e.slot)
+      if (!why) continue
+      const k = `${te.id}:${e.day}:${e.slot}:${e.lessonId}`
+      if (offSeen.has(k)) continue
+      offSeen.add(k)
+      conflicts.push({
+        type: 'off',
+        icon: CalendarX,
+        text: `${te.short} — ${slot(e.day, e.slot)}: ${why === 'methodical' ? t('metodik kun') : t('ish vaqti yopiq')}, ${t("lekin dars qo'yilgan")} (${sName(e.lessonId)}, ${cName(e.classId)})`,
+      })
+    }
+  })
+
+  // Joylashmagan soatlar (o'qituvchi kunlari cheklangan bo'lsa — sababi ham ko'rsatiladi)
   for (const l of lessons) {
     if (!l.subjectId || !l.teacher1Id || l.classIds.length === 0) continue
+    // 1- va 2-o'qituvchining ishlay oladigan kunlari cheklangan bo'lsa — sababi ko'rsatiladi
+    const reason = [l.teacher1Id, l.teacher2Id]
+      .map((tid) => {
+        const te = tid ? teachers.find((x) => x.id === tid) : undefined
+        if (!te) return ''
+        const workable = teacherWorkableDays(te, school.workDays, school.maxLessonsPerDay)
+        if (workable.length >= school.workDays) return ''
+        return workable.length === 0
+          ? ` · ${te.short}: ${t("ishlaydigan kun yo'q")}`
+          : ` · ${te.short}: ${t('faqat')} ${workable.map((d) => DAYS_SHORT[d]).join(', ')}`
+      })
+      .join('')
     for (const cid of l.classIds) {
       const placed = version.entries.filter((e) => e.lessonId === l.id && e.classId === cid).length
       if (placed < l.hoursPerWeek) {
         conflicts.push({
           type: 'unplaced',
           icon: CalendarX,
-          text: `${sName(l.id)} (${cName(cid)}) — ${l.hoursPerWeek - placed}/${l.hoursPerWeek} ${t('soat joylashmadi')}`,
+          text: `${sName(l.id)} (${cName(cid)}) — ${l.hoursPerWeek - placed}/${l.hoursPerWeek} ${t('soat joylashmadi')}${reason}`,
         })
       }
     }
@@ -154,7 +187,10 @@ export function ConflictsPage() {
   }
 
   const byType = (type: string) => conflicts.filter((c) => c.type === type)
-  const hard = conflicts.filter((c) => ['teacher', 'class', 'room'].includes(c.type))
+  // "Qat'iy konfliktlar" soni Dashboard/Hisobotlardagi "Qat'iy buzilish" bilan bir xil (faqat band bo'lib qolish);
+  // metodik kun / yopiq vaqt buzilishi alohida hisoblanadi, lekin u ham qizil ko'rsatiladi.
+  const HARD_TYPES = ['teacher', 'class', 'room', 'off']
+  const hard = conflicts.filter((c) => c.type !== 'off' && HARD_TYPES.includes(c.type))
 
   return (
     <div className="flex flex-col gap-4 p-4 pb-8">
@@ -177,13 +213,14 @@ export function ConflictsPage() {
         <>
           <div className="flex flex-wrap gap-3">
             <Summary ok={hard.length === 0} label={t("Qat'iy konfliktlar")} value={hard.length} />
+            <Summary ok={byType('off').length === 0} label={t('Metodik kun / yopiq vaqt')} value={byType('off').length} />
             <Summary ok={byType('unplaced').length === 0} label={t('Joylashmagan')} value={byType('unplaced').length} />
             <Summary ok={byType('cap').length === 0} label={t("Sig'im oshishi")} value={byType('cap').length} />
           </div>
           <div className="flex flex-col gap-2">
             {conflicts.map((c, i) => {
               const Icon = c.icon
-              const danger = ['teacher', 'class', 'room'].includes(c.type)
+              const danger = HARD_TYPES.includes(c.type)
               return (
                 <div
                   key={i}

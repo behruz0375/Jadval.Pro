@@ -1,6 +1,6 @@
 import type { Project, TimetableVersion, TimetableEntry } from '@/types'
 import { DAYS_UZ } from '@/constants'
-import { WEEK_BADGE } from '@/utils'
+import { WEEK_BADGE, safeColor } from '@/utils'
 
 export type CardMode = 'class' | 'teacher' | 'room'
 
@@ -56,7 +56,7 @@ export function printTimetableCards(
             : mode === 'teacher'
               ? [cName(e.classId), rShort(e.roomId)].filter(Boolean).join(' · ')
               : [cName(e.classId), tShort(e.teacherId)].filter(Boolean).join(' · ')
-        const color = s?.color ?? '#999'
+        const color = safeColor(s?.color)
         return `<div class="l" style="border-left:3px solid ${color}"><b>${wk(e)}${name}</b>${sub ? `<span>${esc(sub)}</span>` : ''}</div>`
       })
       .join('')

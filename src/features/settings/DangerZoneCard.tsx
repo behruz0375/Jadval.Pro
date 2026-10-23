@@ -5,7 +5,7 @@ import { useToast } from '@/store/toast'
 import { useT } from '@/i18n'
 import { Modal } from '@/components/Modal'
 import { defaultProject } from '@/data/factories'
-import { isInvalidClassName } from '@/io/importTaqsimot'
+import { isInvalidClass } from '@/io/importTaqsimot'
 import type { Project } from '@/types'
 
 type Action = 'timetables' | 'project' | 'all' | 'fix-invalid'
@@ -20,7 +20,7 @@ export function DangerZoneCard() {
   const [typedConfirm, setTypedConfirm] = useState('')
 
   // Noma'qul sinflarni (masalan "#", "Xona") va ularning darslarini aniqlaymiz
-  const invalidClasses = project.classes.filter(c => isInvalidClassName(c.name) || isInvalidClassName(c.short || ''))
+  const invalidClasses = project.classes.filter((c) => isInvalidClass(c))
   const invalidClassIds = new Set(invalidClasses.map(c => c.id))
   const brokenLessons = project.lessons.filter(l => l.classIds.some(id => invalidClassIds.has(id)))
   // Juda ko'p soatli darslar (bug tufayli duplicatelangan)

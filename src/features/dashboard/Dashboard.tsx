@@ -20,6 +20,7 @@ import { useToast } from '@/store/toast'
 import { useT } from '@/i18n'
 import { saveProjectToFile, openProjectFromFile } from '@/io/projectFile'
 import type { LucideIcon } from 'lucide-react'
+import { currentVersion } from '@/features/_shared/versions'
 
 export function Dashboard() {
   const setActivePanel = useUI((s) => s.setActivePanel)
@@ -57,7 +58,7 @@ export function Dashboard() {
   }
 
   // Jadval holati — oxirgi versiya statistikasi
-  const latest = project.timetables[project.timetables.length - 1]
+  const latest = currentVersion(project.timetables)
   const totalLessonsRequired = project.lessons.reduce(
     (a, l) => a + l.hoursPerWeek * Math.max(1, l.classIds.length),
     0,

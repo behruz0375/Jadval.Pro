@@ -25,6 +25,7 @@ class _Session:
     room_id: Id | None
     length: int = 1
     max_per_day: int = 0
+    teacher2_id: Id | None = None
 
 
 @dataclass
@@ -56,6 +57,30 @@ def _is_available(avail_json: str | None, day: int, period: int) -> bool:
     if not row or period < 1 or period > len(row):
         return True
     return bool(row[period - 1])
+
+
+def _cell_open(avail: Any, day: int, period: int) -> bool:
+    """Ish vaqti jadvali: klient formati (matritsa [kun][dars] -> bool) yoki JSON satr. day/period — 1 dan boshlanadi."""
+    if avail is None or avail == "":
+        return True
+    if isinstance(avail, str):
+        return _is_available(avail, day, period)
+    if isinstance(avail, list):
+        if day < 1 or day > len(avail):
+            return True
+        row = avail[day - 1]
+        if not isinstance(row, list) or period < 1 or period > len(row):
+            return True
+        return bool(row[period - 1])
+    return True
+
+
+def _avail_of(entity: dict[str, Any] | None) -> Any:
+    if not entity:
+        return None
+    if entity.get("availability") is not None:
+        return entity.get("availability")
+    return entity.get("availability_json") or entity.get("availabilityJson")
 
 
 def generate_timetable(
@@ -94,8 +119,9 @@ def generate_timetable(
     auto_relax = bool(options.get("autoRelax", True))
 
     school = project.get("school", {})
-    days_per_week = int(school.get("daysPerWeek") or school.get("days_per_week") or 6)
+    days_per_week = int(school.get("workDays") or school.get("daysPerWeek") or school.get("days_per_week") or 6)
     periods_per_day = int(school.get("maxLessonsPerDay") or school.get("max_lessons_per_day") or 8)
+    shifts = school.get("shifts") or []
 
     classes = {c["id"]: c for c in project.get("classes", [])}
     subjects = {s["id"]: s for s in project.get("subjects", [])}
@@ -116,6 +142,7 @@ def generate_timetable(
                 class_ids = []
         # Frontend might use string IDs (e.g. "c_1", "t_2") or int — both are fine.
         teacher_id = lesson.get("teacherId") or lesson.get("teacher_id") or lesson.get("teacher1Id")
+        teacher2_id = lesson.get("teacher2Id") or lesson.get("teacher2_id") or None
         subject_id = lesson.get("subjectId") or lesson.get("subject_id")
         room_id = lesson.get("roomId") or lesson.get("room_id")
         hours = int(round(float(lesson.get("hoursPerWeek") or lesson.get("hours_per_week") or 1)))
@@ -130,8 +157,53 @@ def generate_timetable(
                     room_id=room_id,
                     length=1,
                     max_per_day=int(lesson.get("maxPerDay") or lesson.get("max_per_day") or 0),
+                    teacher2_id=teacher2_id,
                 )
             )
+
+    # ---- Qat'iy cheklovlar: metodik kunlar, ish vaqti jadvallari, smena (TypeScript engine bilan bir xil qoidalar) ----
+    def _teacher_open(t: dict[str, Any] | None, day: int, period: int) -> bool:
+        if not t:
+            return True
+        if (day - 1) in (t.get("methodicalDays") or []):
+            return False
+        return _cell_open(_avail_of(t), day, period)
+
+    def _shift_open(cls: dict[str, Any] | None, day: int, period: int) -> bool:
+        if not cls or not shifts:
+            return True
+        idx = int(cls.get("shiftIndex") or 1) - 1
+        sh = shifts[idx] if 0 <= idx < len(shifts) else shifts[0]
+        grid = sh.get("grid") if isinstance(sh, dict) else None
+        if not grid:
+            return True
+        try:
+            return bool(grid[period - 1][day - 1])
+        except (IndexError, TypeError):
+            return True
+
+    def _class_open(cls: dict[str, Any] | None, day: int, period: int) -> bool:
+        return _shift_open(cls, day, period) and _cell_open(_avail_of(cls), day, period)
+
+    # Kunlik sig'im: o'qituvchi kam kun ishlasa (masalan, faqat Juma) — haftalik yukka yetarli qilib oshiriladi
+    smart_dcap: dict[Id, int] = {}
+    for tid, t in teachers.items():
+        workable = [
+            d for d in range(1, days_per_week + 1)
+            if any(_teacher_open(t, d, p) for p in range(1, periods_per_day + 1))
+        ]
+        assigned = sum(
+            int(round(float(le.get("hoursPerWeek") or le.get("hours_per_week") or 1)))
+            for le in lessons
+            if tid in (
+                le.get("teacherId") or le.get("teacher_id") or le.get("teacher1Id"),
+                le.get("teacher2Id") or le.get("teacher2_id"),
+            )
+        )
+        wmax_t = int(t.get("weeklyMax") or t.get("weekly_max") or 24)
+        to_place = min(assigned, wmax_t) if wmax_t > 0 else assigned
+        if workable and to_place > 0:
+            smart_dcap[tid] = math.ceil(to_place / len(workable))
 
     def _domain_size(sess: _Session, class_avail: dict) -> int:
         """Approx: how many (day, slot) can this session fit? Smaller = harder."""
@@ -146,10 +218,9 @@ def generate_timetable(
     # Pre-compute class availability for MRV sort
     _class_avail: dict[tuple, bool] = {}
     for cid, cls in classes.items():
-        avail = cls.get("availability_json") or cls.get("availabilityJson")
         for d in range(1, days_per_week + 1):
             for p in range(1, periods_per_day + 1):
-                _class_avail[(cid, d, p)] = _is_available(avail, d, p)
+                _class_avail[(cid, d, p)] = _class_open(cls, d, p)
 
     def _attempt(trial_seed: int, relax_level: int = 0) -> tuple[_State, int, int]:
         state = _State()
@@ -178,22 +249,25 @@ def generate_timetable(
         for sess in order:
             placed = False
             teacher = teachers.get(sess.teacher_id)
+            teacher2 = teachers.get(sess.teacher2_id) if sess.teacher2_id else None
+            # Dars o'qituvchilari (1- va 2-o'qituvchi): ikkalasi ham metodik kun / ish vaqti / band bo'lmaslik / norma qoidalariga bo'ysunadi
+            teacher_pairs = [(sess.teacher_id, teacher)] + ([(sess.teacher2_id, teacher2)] if sess.teacher2_id else [])
             room = rooms.get(sess.room_id) if sess.room_id else None
             # try each day/slot
             slots = [(d, p) for d in range(1, days_per_week + 1) for p in range(1, periods_per_day + 1)]
             rng_local.shuffle(slots)
             for day, period in slots:
-                # teacher availability
-                if teacher and not _is_available(teacher.get("availability_json") or teacher.get("availabilityJson"), day, period):
+                # o'qituvchilarning metodik kuni va ish vaqti — QAT'IY (hech qanday relax'da buzilmaydi)
+                if any(not _teacher_open(t, day, period) for _, t in teacher_pairs):
                     continue
                 # teacher conflict
-                if (sess.teacher_id, day, period) in state.teacher_slots:
+                if any((tid, day, period) in state.teacher_slots for tid, _ in teacher_pairs):
                     continue
                 # class conflicts
                 conflict = False
                 for cid in sess.class_ids:
                     cls = classes.get(cid)
-                    if cls and not _is_available(cls.get("availability_json") or cls.get("availabilityJson"), day, period):
+                    if cls and not _class_open(cls, day, period):
                         conflict = True
                         break
                     if (cid, day, period) in state.class_slots:
@@ -214,17 +288,23 @@ def generate_timetable(
                             break
                 if conflict:
                     continue
-                # teacher daily capacity (relax darajasida yumshatiladi)
-                base_dcap = int(teacher.get("dailyCapacity") or teacher.get("daily_capacity") or 6) if teacher else 6
-                dcap = 999 if relax_level >= 3 else base_dcap + relax_cap
-                day_cnt = state.teacher_day_count.get((sess.teacher_id, day), 0)
-                if dcap > 0 and day_cnt + sess.length > dcap:
-                    continue
-                # teacher weekly max — QAT'IY, hech qanday relax'da buzilmaydi
-                # (o'qituvchining shartnoma/tarif soati)
-                wmax = int(teacher.get("weeklyMax") or teacher.get("weekly_max") or 24) if teacher else 24
-                wcnt = state.teacher_week_count.get(sess.teacher_id, 0)
-                if wmax > 0 and wcnt + sess.length > wmax:
+                # teacher daily capacity (relax darajasida yumshatiladi) + haftalik norma — har ikki o'qituvchi uchun
+                cap_ok = True
+                for tid, t in teacher_pairs:
+                    base_dcap = int(t.get("dailyCapacity") or t.get("daily_capacity") or 6) if t else 6
+                    base_dcap = max(base_dcap, smart_dcap.get(tid, 0))
+                    dcap = 999 if relax_level >= 3 else base_dcap + relax_cap
+                    day_cnt_t = state.teacher_day_count.get((tid, day), 0)
+                    if dcap > 0 and day_cnt_t + sess.length > dcap:
+                        cap_ok = False
+                        break
+                    # teacher weekly max — QAT'IY, hech qanday relax'da buzilmaydi (o'qituvchining shartnoma/tarif soati)
+                    wmax = int(t.get("weeklyMax") or t.get("weekly_max") or 24) if t else 24
+                    wcnt_t = state.teacher_week_count.get(tid, 0)
+                    if wmax > 0 and wcnt_t + sess.length > wmax:
+                        cap_ok = False
+                        break
+                if not cap_ok:
                     continue
                 # room (if required)
                 chosen_room: int | None = None
@@ -232,15 +312,13 @@ def generate_timetable(
                     if room:
                         if (room["id"], day, period) in state.room_slots:
                             continue
-                        if not _is_available(room.get("availability_json") or room.get("availabilityJson"), day, period):
+                        if not _cell_open(_avail_of(room), day, period):
                             continue
                         chosen_room = room["id"]
                     else:
                         # pick any free room
                         for rid, rroom in rooms.items():
-                            if (rid, day, period) not in state.room_slots and _is_available(
-                                rroom.get("availability_json") or rroom.get("availabilityJson"), day, period
-                            ):
+                            if (rid, day, period) not in state.room_slots and _cell_open(_avail_of(rroom), day, period):
                                 chosen_room = rid
                                 break
 
@@ -249,9 +327,10 @@ def generate_timetable(
                     state.class_slots[(cid, day, period)] = sess.id
                     key = (cid, day, sess.lesson_id)
                     state.class_lesson_day_count[key] = state.class_lesson_day_count.get(key, 0) + 1
-                state.teacher_slots[(sess.teacher_id, day, period)] = sess.id
-                state.teacher_day_count[(sess.teacher_id, day)] = day_cnt + sess.length
-                state.teacher_week_count[sess.teacher_id] = wcnt + sess.length
+                for tid, _t in teacher_pairs:
+                    state.teacher_slots[(tid, day, period)] = sess.id
+                    state.teacher_day_count[(tid, day)] = state.teacher_day_count.get((tid, day), 0) + sess.length
+                    state.teacher_week_count[tid] = state.teacher_week_count.get(tid, 0) + sess.length
                 if chosen_room is not None:
                     state.room_slots[(chosen_room, day, period)] = sess.id
                 state.entries.append(
@@ -259,6 +338,7 @@ def generate_timetable(
                         "classIds": sess.class_ids,
                         "subjectId": sess.subject_id,
                         "teacherId": sess.teacher_id,
+                        "teacher2Id": sess.teacher2_id,
                         "roomId": chosen_room,
                         "day": day,
                         "period": period,

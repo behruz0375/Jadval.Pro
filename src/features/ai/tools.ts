@@ -12,6 +12,9 @@ import { newClass, newSubject, newRoom, newTeacher, newLesson } from '@/data/fac
 import { buildDemoProject } from '@/data/seed'
 import { classLoad, teacherLoad, subjectLoad, countHardViolations } from '@/features/_shared/compute'
 import { DAYS_UZ } from '@/constants'
+import { currentVersion } from '@/features/_shared/versions'
+import { teacherOffReason } from '@/engine/teacherDays'
+import { confirmAsync } from '@/store/confirm'
 
 // --------- Tiplar ---------
 
@@ -57,6 +60,7 @@ export interface ToolContext {
   newProject: () => void
   markSaved: () => void
   addTimetable: (v: TimetableVersion) => void
+  addGeneratedTimetable: (v: TimetableVersion) => void
   updateTimetable: (id: string, patch: Partial<TimetableVersion>) => void
   removeTimetable: (id: string) => void
   // UI
@@ -551,13 +555,22 @@ export const TOOLS: ToolDef[] = [
       { name: 'entity', type: 'string', description: 'Tur', required: true, enum: ['teacher', 'class', 'subject', 'room', 'lesson'] },
       { name: 'name', type: 'string', description: 'O\'chiriladigan element nomi', required: true },
     ],
-    run: (a, ctx) => {
+    run: async (a, ctx) => {
       const p = ctx.getProject()
       const entity = s(a.entity) as AnyEntity
       const list = listForEntity(p, entity) as { id: string; fullName?: string; name?: string }[]
       const found = findEntity(list, s(a.name))
       if (!found) return { ok: false, message: `"${s(a.name)}" nomli ${entityUz(entity)} topilmadi.` }
       const label = found.fullName ?? found.name ?? ''
+      // Bu qaytarib bo'lmaydigan amal (bog'langan darslar va jadval yozuvlari ham o'chadi) — doim tasdiq so'raymiz
+      const ok = await confirmAsync({
+        title: `${label} o'chirilsinmi?`,
+        message: `"${label}" (${entityUz(entity)}) o'chiriladi. Unga bog'langan darslar va jadval yozuvlari ham olib tashlanadi.`,
+        confirmText: "Ha, o'chir",
+        tone: 'danger',
+      })
+      if (!ok) return { ok: false, message: 'Bekor qilindi — hech narsa o‘chirilmadi.' }
+      await ctx.backup().catch(() => {})
       if (entity === 'teacher') ctx.removeTeacher(found.id)
       else if (entity === 'class') ctx.removeClass(found.id)
       else if (entity === 'subject') ctx.removeSubject(found.id)
@@ -580,7 +593,7 @@ export const TOOLS: ToolDef[] = [
       ctx.setActivePanel('distribution')
       const restarts = Math.min(10, Math.max(1, n(a.restarts) ?? 3))
       const v = await ctx.generate({ seed: Math.floor(Math.random() * 1e9), considerRooms: true, spreadDays: true, minimizeGaps: true, restarts, autoRelax: true })
-      ctx.addTimetable(v)
+      ctx.addGeneratedTimetable(v)
       const total = v.stats.placed + v.stats.unplaced
       if (v.stats.unplaced === 0) {
         return { ok: true, message: `✓ Jadval tayyor! Barcha ${v.stats.placed} dars joylashtirildi. Qat'iy to'qnashuv: ${v.stats.hardViolations}, o'qituvchi oynalari: ${v.stats.teacherGaps}.` }
@@ -608,11 +621,11 @@ export const TOOLS: ToolDef[] = [
     params: [],
     run: async (_a, ctx) => {
       const p = ctx.getProject()
-      const latest = p.timetables[p.timetables.length - 1]
+      const latest = currentVersion(p.timetables)
       if (!latest || latest.entries.length === 0) return { ok: false, message: 'Avval jadval tuzing.' }
       ctx.setActivePanel('distribution')
       const v = await ctx.improve()
-      ctx.addTimetable(v)
+      ctx.addGeneratedTimetable(v)
       return { ok: true, message: `✓ Yaxshilandi — o'qituvchi oynalari: ${v.stats.teacherGaps}. Yana takrorlab yanada kamaytirish mumkin.` }
     },
   },
@@ -684,7 +697,7 @@ export const TOOLS: ToolDef[] = [
     params: [],
     run: (_a, ctx) => {
       const p = ctx.getProject()
-      const v = p.timetables[p.timetables.length - 1]
+      const v = currentVersion(p.timetables)
       if (!v) return { ok: false, message: 'Hali jadval tuzilmagan.' }
       const total = v.stats.placed + v.stats.unplaced
       return { ok: true, message: `Oxirgi jadval "${v.name}": ${v.stats.placed}/${total} dars joylashgan, qat'iy buzilish ${v.stats.hardViolations}, o'qituvchi oynalari ${v.stats.teacherGaps}, yumshoq jarima ${v.stats.softPenalty}.` }
@@ -712,13 +725,41 @@ export const TOOLS: ToolDef[] = [
     name: 'new_project',
     description: 'Yangi bo\'sh loyiha boshlaydi (avval avto-backup qiladi).',
     params: [],
-    run: async (_a, ctx) => { await ctx.backup().catch(() => {}); ctx.newProject(); return { ok: true, message: '✓ Yangi loyiha boshlandi.', navigate: 'school' } },
+    run: async (_a, ctx) => {
+      const p = ctx.getProject()
+      if (p.classes.length > 0 || p.teachers.length > 0 || p.lessons.length > 0) {
+        const ok = await confirmAsync({
+          title: 'Yangi loyiha boshlansinmi?',
+          message: "Joriy loyiha o'rniga bo'sh loyiha ochiladi (zaxira nusxa avtomatik saqlanadi).",
+          confirmText: 'Ha, yangi loyiha',
+          tone: 'danger',
+        })
+        if (!ok) return { ok: false, message: 'Bekor qilindi — joriy loyiha o‘zgarmadi.' }
+      }
+      await ctx.backup().catch(() => {})
+      ctx.newProject()
+      return { ok: true, message: '✓ Yangi loyiha boshlandi.', navigate: 'school' }
+    },
   },
   {
     name: 'load_demo',
     description: 'Namuna (demo) maktab ma\'lumotlarini yuklaydi — sinab ko\'rish uchun.',
     params: [],
-    run: (_a, ctx) => { ctx.setProject(buildDemoProject()); return { ok: true, message: "✓ Namuna ma'lumotlar yuklandi.", navigate: 'dashboard' } },
+    run: async (_a, ctx) => {
+      const p = ctx.getProject()
+      if (p.classes.length > 0 || p.teachers.length > 0 || p.lessons.length > 0) {
+        const ok = await confirmAsync({
+          title: "Namuna ma'lumotlar yuklansinmi?",
+          message: "Joriy loyiha namuna ma'lumotlar bilan almashtiriladi (zaxira nusxa avtomatik saqlanadi).",
+          confirmText: 'Ha, yukla',
+          tone: 'danger',
+        })
+        if (!ok) return { ok: false, message: 'Bekor qilindi — joriy loyiha o‘zgarmadi.' }
+        await ctx.backup().catch(() => {})
+      }
+      ctx.setProject(buildDemoProject())
+      return { ok: true, message: "✓ Namuna ma'lumotlar yuklandi.", navigate: 'dashboard' }
+    },
   },
   {
     name: 'backup',
@@ -861,7 +902,7 @@ export const TOOLS: ToolDef[] = [
     ],
     run: (a, ctx) => {
       const p = ctx.getProject()
-      const v = p.timetables[p.timetables.length - 1]
+      const v = currentVersion(p.timetables)
       if (!v || v.entries.length === 0) return { ok: false, message: 'Hali jadval tuzilmagan.' }
       const target = s(a.target) === 'teacher' ? 'teacher' : 'class'
       const list = target === 'teacher' ? p.teachers : p.classes
@@ -887,11 +928,17 @@ export const TOOLS: ToolDef[] = [
     ],
     run: (a, ctx) => {
       const p = ctx.getProject()
-      const v = p.timetables[p.timetables.length - 1]
+      const v = currentVersion(p.timetables)
       const d = parseDay(s(a.day)); const slot = n(a.slot)
       if (d == null || !slot) return { ok: false, message: 'Kun va dars raqamini aniq ayting.' }
-      const busy = new Set((v?.entries ?? []).filter((e) => e.day === d && e.slot === slot).map((e) => e.teacherId))
-      const free = p.teachers.filter((t) => !busy.has(t.id))
+      const busy = new Set<string>()
+      for (const e of v?.entries ?? []) {
+        if (e.day !== d || e.slot !== slot) continue
+        if (e.teacherId) busy.add(e.teacherId)
+        if (e.teacher2Id) busy.add(e.teacher2Id)
+      }
+      // Band bo'lmagan, shuningdek shu kun metodik kuni emas va ish vaqti yopiq emas
+      const free = p.teachers.filter((t) => !busy.has(t.id) && teacherOffReason(t, d, slot) === null)
       if (free.length === 0) return { ok: true, message: `${DAYS_UZ[d]} ${slot}-darsda hamma o'qituvchi band.` }
       const names = free.slice(0, 25).map((t) => t.short).join(', ')
       return { ok: true, message: `${DAYS_UZ[d]} ${slot}-darsda bo'sh (${free.length}): ${names}${free.length > 25 ? '…' : ''}.` }
@@ -906,7 +953,7 @@ export const TOOLS: ToolDef[] = [
     ],
     run: (a, ctx) => {
       const p = ctx.getProject()
-      const v = p.timetables[p.timetables.length - 1]
+      const v = currentVersion(p.timetables)
       if (!v || v.entries.length === 0) return { ok: false, message: 'Jadval tuzilmagan — almashtirishni hisoblab bo\'lmaydi.' }
       const t = findEntity(p.teachers, s(a.teacher))
       if (!t) return { ok: false, message: `"${s(a.teacher)}" o'qituvchi topilmadi.` }
@@ -918,8 +965,15 @@ export const TOOLS: ToolDef[] = [
       const out: string[] = []
       for (const e of lessons) {
         const sub = subjOf(e.lessonId)
-        const busy = new Set(v.entries.filter((x) => x.day === d && x.slot === e.slot && x.teacherId !== t.id).map((x) => x.teacherId))
-        const cands = p.teachers.filter((c) => c.id !== t.id && !busy.has(c.id) && (!sub || c.subjectIds.includes(sub.subjId)))
+        const busy = new Set<string>()
+        for (const x of v.entries) {
+          if (x.day !== d || x.slot !== e.slot) continue
+          if (x.teacherId && x.teacherId !== t.id) busy.add(x.teacherId)
+          if (x.teacher2Id && x.teacher2Id !== t.id) busy.add(x.teacher2Id)
+        }
+        const cands = p.teachers.filter(
+          (c) => c.id !== t.id && !busy.has(c.id) && teacherOffReason(c, d, e.slot) === null && (!sub || c.subjectIds.includes(sub.subjId)),
+        )
         const best = cands.slice(0, 3).map((c) => c.short).join(', ') || 'mos o\'rinbosar yo\'q'
         out.push(`${e.slot}-dars (${sub?.name ?? '?'}): ${best}`)
       }
@@ -932,7 +986,7 @@ export const TOOLS: ToolDef[] = [
     params: [],
     run: (_a, ctx) => {
       const p = ctx.getProject()
-      const v = p.timetables[p.timetables.length - 1]
+      const v = currentVersion(p.timetables)
       if (!v) return { ok: false, message: 'Jadval tuzilmagan.' }
       const hv = countHardViolations(v.entries)
       if (hv === 0) return { ok: true, message: '✓ Jadvalda qat\'iy to\'qnashuv yo\'q — toza.' }
@@ -943,10 +997,17 @@ export const TOOLS: ToolDef[] = [
     name: 'clear_timetable',
     description: "Oxirgi tuzilgan jadvalni (yozuvlarini) tozalaydi/o'chiradi.",
     params: [],
-    run: (_a, ctx) => {
+    run: async (_a, ctx) => {
       const p = ctx.getProject()
-      const v = p.timetables[p.timetables.length - 1]
+      const v = currentVersion(p.timetables)
       if (!v) return { ok: false, message: 'O\'chiriladigan jadval yo\'q.' }
+      const ok = await confirmAsync({
+        title: 'Jadval tozalansinmi?',
+        message: `"${v.name}" jadvali o'chiriladi.`,
+        confirmText: "Ha, o'chir",
+        tone: 'danger',
+      })
+      if (!ok) return { ok: false, message: 'Bekor qilindi — jadval o‘zgarmadi.' }
       ctx.removeTimetable(v.id)
       return { ok: true, message: `✓ "${v.name}" jadvali o'chirildi.` }
     },
@@ -1012,7 +1073,7 @@ export const TOOLS: ToolDef[] = [
     params: [],
     run: (_a, ctx) => {
       const p = ctx.getProject()
-      const working = p.timetables.find((t) => t.name === 'Ishchi jadval') ?? p.timetables[p.timetables.length - 1]
+      const working = p.timetables.find((t) => t.name === 'Ishchi jadval') ?? currentVersion(p.timetables)
       if (!working || working.entries.length === 0) {
         return { ok: false, message: 'Hali jadval tuzilmagan. "Jadval tuz" buyrug‘ini ishlating yoki Taqsimot → Avtomatik tugmasini bosing.' }
       }
@@ -1055,7 +1116,7 @@ export const TOOLS: ToolDef[] = [
         }
       }
       // Loyiha xatosi yo'q, lekin unplaced qolgan bo'lsa — joylashtirish qiyinligi
-      const working = p.timetables.find((t) => t.name === 'Ishchi jadval') ?? p.timetables[p.timetables.length - 1]
+      const working = p.timetables.find((t) => t.name === 'Ishchi jadval') ?? currentVersion(p.timetables)
       if (!working || working.stats.unplaced === 0) {
         return { ok: true, message: 'Hamma darslar joylashgan — hech qanday muammo yo‘q.' }
       }
@@ -1072,6 +1133,12 @@ export const TOOLS: ToolDef[] = [
           .reduce((a, l) => a + l.hoursPerWeek, 0)
         if (t.weeklyMax > 0 && assigned > t.weeklyMax) {
           reasons.push(`${t.fullName}: ${assigned} soat tayinlangan, ${t.weeklyMax} soat ruxsat → cheklov sabab bir qism tushib qoladi`)
+        }
+      }
+      // O'qituvchining ishlaydigan kunlari/vaqti yuklamaga yetmasa — aniq o'qituvchi, kunlar va yetishmayotgan soat
+      for (const i of v.issues) {
+        if (i.entity === 'teacher' && /ishlaydigan kun|barcha kunlar/.test(i.message)) {
+          reasons.push(`${i.message}${i.hint ? ` → ${i.hint}` : ''}`)
         }
       }
       if (reasons.length === 0) {

@@ -7,7 +7,7 @@ import { Field, TextField } from '@/components/Field'
 import { ContactAdmin } from '@/components/ContactAdmin'
 import { BackgroundSlideshow } from '@/components/BackgroundSlideshow'
 import { APP_VERSION, IS_PUBLIC_DEPLOY } from '@/constants'
-import { login as cloudLogin } from '@/features/cloud/api'
+import { login as cloudLogin, signOut as cloudSignOut, cloudErrorMessage, isCloudNetworkError } from '@/features/cloud/api'
 
 /** Tiklash kodi bilan parolni qayta o'rnatish oynasi (Zavuch/O'TIBDO' parolni unutganda) */
 export function RecoveryModal({ role, open, onClose }: { role: StaffRole; open: boolean; onClose: () => void }) {
@@ -243,7 +243,7 @@ export function OwnerLoginModal({ open, onClose }: { open: boolean; onClose: () 
         e = await ownerSetup(login.trim(), pw)
       } catch (err) {
         setBusy(false)
-        setErr(err instanceof Error ? err.message : 'Serverga ulanib bo‘lmadi')
+        setErr(isCloudNetworkError(err) ? "Serverga ulanib bo'lmadi — internetni tekshiring (server uyg'onishi ~1 daqiqa olishi mumkin)" : cloudErrorMessage(err))
         return
       }
       setBusy(false)
@@ -342,11 +342,13 @@ export function StaffLoginScreen({ role, onBack }: { role: StaffRole; onBack?: (
   const staff = useAuth((s) => s.staff)
   const staffLogin = useAuth((s) => s.staffLogin)
   const setupDirector = useAuth((s) => s.setupDirector)
+  const enrollDirectorFromCloud = useAuth((s) => s.enrollDirectorFromCloud)
   const toast = useToast()
   const [login, setLogin] = useState('')
   const [pw, setPw] = useState('')
   const [pw2, setPw2] = useState('')
   const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const [recoverOpen, setRecoverOpen] = useState(false)
 
   const cred = staff[role]
@@ -368,24 +370,8 @@ export function StaffLoginScreen({ role, onBack }: { role: StaffRole; onBack?: (
     )
   }
 
-  // Public deploy'da: Zavuch hisobi hali mavjud emas → admin bilan Telegramda bog'laning
-  if (IS_PUBLIC_DEPLOY && role === 'director' && !cred) {
-    return (
-      <AuthLayout title={`${roleTitle} — kirish`} onBack={onBack}>
-        <p className="mb-3 rounded-lg bg-accent/10 px-3 py-2.5 text-sm text-accent">
-          Hali hisob yo'q. <b>Admin</b> (dastur sotuvchisi) sizga Telegramda login va parol beradi —
-          shundan so'ng pastki qismdan oddiy <b>«Kirish»</b> ishlaydi.
-        </p>
-        <ContactAdmin
-          variant="default"
-          label="Login/parol olish uchun — Adminga Telegramda yozing"
-          className="mt-2"
-        />
-      </AuthLayout>
-    )
-  }
-
   const submit = async () => {
+    if (busy) return
     setErr(null)
     let e: string | null
     if (isSetup) {
@@ -395,6 +381,29 @@ export function StaffLoginScreen({ role, onBack }: { role: StaffRole; onBack?: (
       }
       e = await setupDirector(login, pw)
       if (!e) toast.success('Zavuch hisobi yaratildi — xush kelibsiz!')
+    } else if (IS_PUBLIC_DEPLOY && role === 'director') {
+      // Ommaviy sayt: login/parol SERVERDA tekshiriladi (admin mijozni yaratganda serverda Zavuch hisobi ochiladi).
+      // Tasdiqlangach shu qurilmada mahalliy hisob saqlanadi — keyingi kirishlar internetsiz ham ishlaydi.
+      setBusy(true)
+      try {
+        const resp = await cloudLogin(login.trim(), pw)
+        if (resp.user.role !== 'director') {
+          cloudSignOut()
+          e = resp.user.role === 'owner' ? 'Bu admin hisobi — «Admin panel» orqali kiring' : 'Bu hisob Zavuch emas'
+        } else {
+          e = await enrollDirectorFromCloud(login, pw)
+        }
+      } catch (er) {
+        if (isCloudNetworkError(er)) {
+          // Internet yoki server yo'q — shu qurilmada avval saqlangan hisob bilan kirishga urinamiz
+          e = staff.director ? await staffLogin(role, login, pw) : "Serverga ulanib bo'lmadi — internetni tekshirib qayta urining"
+        } else {
+          e = cloudErrorMessage(er)
+        }
+      } finally {
+        setBusy(false)
+      }
+      if (!e) toast.success(`${roleTitle} sifatida kirdingiz`)
     } else {
       e = await staffLogin(role, login, pw)
       if (!e) toast.success(`${roleTitle} sifatida kirdingiz`)
@@ -446,8 +455,14 @@ export function StaffLoginScreen({ role, onBack }: { role: StaffRole; onBack?: (
           </Field>
         )}
         {err && <p className="text-sm text-danger">{err}</p>}
-        <button onClick={submit} className="btn btn-accent hover-lift mt-1 w-full">
-          {isSetup ? <><UserPlus size={16} /> Hisobni ro'yxatdan o'tkazish</> : <><LogIn size={16} /> Kirish</>}
+        <button onClick={submit} disabled={busy} className="btn btn-accent hover-lift mt-1 w-full disabled:opacity-60">
+          {isSetup ? (
+            <><UserPlus size={16} /> Hisobni ro'yxatdan o'tkazish</>
+          ) : busy ? (
+            <>Tekshirilmoqda… (server uyg'onayotgan bo'lsa ~1 daqiqa)</>
+          ) : (
+            <><LogIn size={16} /> Kirish</>
+          )}
         </button>
         {!isSetup && (
           <button

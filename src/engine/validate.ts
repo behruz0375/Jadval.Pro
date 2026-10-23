@@ -10,6 +10,9 @@
 //  - "6-A sinfning ish vaqti grid'ida barcha slotlar o'chirilgan"
 
 import type { Project } from '@/types'
+import { DAYS_UZ } from '@/constants'
+import { teacherOffReason, teacherOpenSlotsOnDay, teacherWorkableDays } from './teacherDays'
+import { classesBeyondMaxLessons, requiredLessonSlots } from './shifts'
 
 export interface ValidationIssue {
   severity: 'error' | 'warning' | 'info'
@@ -102,6 +105,37 @@ export function validateProject(project: Project): ValidationResult {
         hint: 'Darslar bo‘limida tahrirlab o‘qituvchini tanlang',
       })
     }
+    // O'chirilgan (endi mavjud bo'lmagan) sinf/o'qituvchi/xonaga havolalar — dars jimgina joylashmay qolmasin
+    const missingClasses = l.classIds.filter((cid) => !classes.some((c) => c.id === cid))
+    if (missingClasses.length > 0) {
+      issues.push({
+        severity: 'error',
+        entity: 'lesson',
+        entityId: l.id,
+        message: `"${subj.name}" darsi mavjud bo'lmagan (o'chirilgan) sinfga biriktirilgan`,
+        hint: 'Darslar bo‘limida darsni tahrirlab sinfni tanlang yoki darsni o‘chiring',
+      })
+    }
+    for (const [label, tid] of [['1-o‘qituvchi', l.teacher1Id], ['2-o‘qituvchi', l.teacher2Id]] as const) {
+      if (tid && !teachers.some((t) => t.id === tid)) {
+        issues.push({
+          severity: 'error',
+          entity: 'lesson',
+          entityId: l.id,
+          message: `"${subj.name}" darsining ${label}si mavjud emas (o'chirilgan)`,
+          hint: 'Darslar bo‘limida tahrirlab o‘qituvchini qayta tanlang',
+        })
+      }
+    }
+    if (l.roomId && !project.rooms.some((r) => r.id === l.roomId)) {
+      issues.push({
+        severity: 'warning',
+        entity: 'lesson',
+        entityId: l.id,
+        message: `"${subj.name}" darsi mavjud bo'lmagan (o'chirilgan) xonaga biriktirilgan — xona hisobga olinmaydi`,
+        hint: 'Darslar bo‘limida xonani qayta tanlang yoki tozalang',
+      })
+    }
     if (l.hoursPerWeek <= 0) {
       issues.push({
         severity: 'error',
@@ -129,25 +163,79 @@ export function validateProject(project: Project): ValidationResult {
         hint: `O'qituvchining "Haftalik maksimum" ni ${assigned} ga oshiring, yoki shu dars boshqa o'qituvchiga biriktiring`,
       })
     }
-    if (t.methodicalDays.length > 0) {
-      const availableSlots = (() => {
-        let n = 0
-        for (let d = 0; d < days; d++) {
-          if (t.methodicalDays.includes(d)) continue
-          for (let p = 0; p < maxP; p++) if (t.availability?.[d]?.[p] ?? true) n++
-        }
-        return n
-      })()
-      if (assigned > availableSlots) {
+    // Metodik kunlar va "Ish vaqti" gridi qat'iy cheklov — generator ularni hech qachon buzmaydi.
+    // Shuning uchun o'qituvchi ishlay oladigan kun/slotlar yuklamaga yetmasa, aniq sababini aytamiz.
+    const workable = teacherWorkableDays(t, days, maxP)
+    if (assigned > 0 && workable.length === 0) {
+      issues.push({
+        severity: 'error',
+        entity: 'teacher',
+        entityId: t.id,
+        message: `${t.fullName}: barcha kunlar metodik yoki yopiq, lekin ${assigned} soat dars biriktirilgan — joylashtirib bo'lmaydi`,
+        hint: "O'qituvchining metodik kunlarini kamaytiring yoki «Ish vaqti» gridida kamida bitta kunni oching",
+      })
+    } else if (assigned > 0) {
+      const cap = workable.reduce((a, d) => a + teacherOpenSlotsOnDay(t, d, maxP), 0)
+      const toPlace = t.weeklyMax > 0 ? Math.min(assigned, t.weeklyMax) : assigned
+      if (toPlace > cap) {
+        const dayNames = workable.map((d) => DAYS_UZ[d]).join(', ')
         issues.push({
           severity: 'warning',
           entity: 'teacher',
           entityId: t.id,
-          message: `${t.fullName}: ${assigned} soat kerak, lekin faqat ${availableSlots} slot bo'sh (metodik kunlar + ish vaqti grid'ini hisobga olib)`,
-          hint: "Metodik kunlarni kamaytiring yoki ish vaqti gridida ko'proq slot yoqing",
+          message: `${t.fullName}: ishlaydigan kunlari — ${dayNames}. ${toPlace} soat kerak, lekin bu kunlarga ko'pi bilan ${cap} soat sig'adi (${toPlace - cap} soat joylashmaydi)`,
+          hint: "Metodik kunlarni kamaytiring, «Ish vaqti» gridida ko'proq slot oching yoki soatni boshqa o'qituvchiga bering",
         })
       }
     }
+  }
+
+  // ================== 3b. Dars darajasida: o'qituvchi(lar) va sinf(lar) UMUMIY bo'sh vaqti ==================
+  // Dars faqat shunday kataklarga tushadiki, unda 1-/2-o'qituvchining metodik kuni/ish vaqti ochiq VA sinfning smenasi
+  // hamda ish vaqti ochiq bo'lsin. Bunday kataklar soni soatdan kam bo'lsa — dars hech qachon to'liq joylashmaydi.
+  // (Smenasi "Kuniga maksimal dars"dan keyin boshlanadigan sinflar pastda alohida xato sifatida ko'rsatiladi.)
+  const beyondNames = new Set(classesBeyondMaxLessons(project))
+  for (const l of lessons) {
+    const ts = [l.teacher1Id, l.teacher2Id]
+      .map((id) => (id ? teachers.find((t) => t.id === id) : undefined))
+      .filter((t): t is NonNullable<typeof t> => !!t)
+    const cs = l.classIds.map((id) => classes.find((c) => c.id === id)).filter((c): c is NonNullable<typeof c> => !!c)
+    if (ts.length === 0 || cs.length === 0 || l.hoursPerWeek <= 0) continue
+    if (cs.some((c) => beyondNames.has(c.name))) continue
+    let common = 0
+    for (let d = 0; d < days; d++) {
+      for (let p = 1; p <= maxP; p++) {
+        if (ts.some((t) => teacherOffReason(t, d, p) !== null)) continue
+        const classesOpen = cs.every((c) => {
+          const sh = school.shifts[c.shiftIndex - 1] ?? school.shifts[0]
+          return (sh?.grid?.[p - 1]?.[d] ?? true) && (c.availability?.[d]?.[p - 1] ?? true)
+        })
+        if (classesOpen) common++
+      }
+    }
+    if (l.hoursPerWeek > common) {
+      const subj = subjects.find((s) => s.id === l.subjectId)?.name ?? 'Dars'
+      const who = ts.map((t) => t.short || t.fullName).join(' + ')
+      const where = cs.map((c) => c.name).join(', ')
+      issues.push({
+        severity: common === 0 ? 'error' : 'warning',
+        entity: 'lesson',
+        entityId: l.id,
+        message: `${subj} (${where}, ${who}): ${l.hoursPerWeek} soat kerak, lekin o'qituvchi va sinfning umumiy bo'sh vaqti ${common} ta — ${l.hoursPerWeek - common} soat joylashmaydi`,
+        hint: "O'qituvchining metodik kunlarini kamaytiring, sinf yoki o'qituvchining ish vaqtini kengaytiring yoki darsni boshqa o'qituvchiga bering",
+      })
+    }
+  }
+
+  // 2-smena (masalan 8–14-darslar) "Kuniga maksimal dars"dan keyin boshlansa — bu sinflarga umuman dars sig'maydi
+  const beyondShift = classesBeyondMaxLessons(project)
+  if (beyondShift.length > 0) {
+    issues.push({
+      severity: 'error',
+      entity: 'school',
+      message: `${beyondShift.length} ta sinf (${beyondShift.slice(0, 3).join(', ')}${beyondShift.length > 3 ? '...' : ''}) keyingi smenada, lekin «Kuniga maksimal dars» (${maxP}) undan kam — bu sinflarga dars sig'maydi`,
+      hint: `Maktab sozlamalarida «Kuniga maksimal dars»ni ${requiredLessonSlots(project)} ga oshiring (jadval tuzishda avtomatik oshiriladi)`,
+    })
   }
 
   // ================== 4. Sinf sig'imi ==================

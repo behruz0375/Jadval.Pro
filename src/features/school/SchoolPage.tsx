@@ -4,7 +4,8 @@ import { useProject } from '@/store/project'
 import { useToast } from '@/store/toast'
 import { AvailabilityGrid } from '@/components/AvailabilityGrid'
 import { Field, TextField, SelectField, NumberField } from '@/components/Field'
-import { generateLessonTimes, fillShiftTimes } from '@/data/factories'
+import { generateLessonTimes, fillShiftTimes, makeShiftGrid } from '@/data/factories'
+import { MAX_LESSONS } from '@/constants'
 import { useT } from '@/i18n'
 import { cx, uid } from '@/utils'
 import type { Shift, Building, AvailabilityMatrix } from '@/types'
@@ -31,6 +32,16 @@ export function SchoolPage() {
   const school = useProject((s) => s.project.school)
   const updateSchool = useProject((s) => s.updateSchool)
   const setMaxLessonsPerDay = useProject((s) => s.setMaxLessonsPerDay)
+  const setWorkDays = useProject((s) => s.setWorkDays)
+  const removeShiftAt = useProject((s) => s.removeShiftAt)
+  // "Kuniga maks. dars" yozish paytida emas, tugagach (blur/Enter) qo'llanadi — aks holda har bir harfda ish vaqti kataklari qisqarib, yopilgan kataklar yo'qoladi
+  const [maxDraft, setMaxDraft] = useState(String(school.maxLessonsPerDay))
+  useEffect(() => setMaxDraft(String(school.maxLessonsPerDay)), [school.maxLessonsPerDay])
+  const commitMax = () => {
+    const n = Math.min(MAX_LESSONS, Math.max(4, Math.round(+maxDraft || school.maxLessonsPerDay)))
+    setMaxDraft(String(n))
+    if (n !== school.maxLessonsPerDay) setMaxLessonsPerDay(n)
+  }
   const toast = useToast()
   const t = useT()
   const { isReadOnly } = useExpiry()
@@ -79,14 +90,21 @@ export function SchoolPage() {
     const nextStart = (last?.startLesson ?? 1) + (last?.lessonCount ?? 0)
     const newIdx = school.shifts.length + 1
     const lessonCount = 7
+    const lastLesson = nextStart + lessonCount - 1
+    if (lastLesson > MAX_LESSONS) {
+      toast.error(`Navbatlar jami ${MAX_LESSONS} ta darsdan oshmasligi kerak`)
+      return
+    }
+    // Navbat jadvali: faqat shu navbatning darslari (nextStart..lastLesson) ochiq
     const newShift: Shift = {
       index: newIdx,
       startLesson: nextStart,
       lessonCount,
-      grid: Array.from({ length: lessonCount }, () => new Array(school.workDays).fill(true)),
+      grid: makeShiftGrid(nextStart, lessonCount, school.workDays),
     }
     const shifts = [...school.shifts, newShift]
-    updateSchool({ shifts, maxLessonsPerDay: Math.max(school.maxLessonsPerDay, nextStart + lessonCount - 1) })
+    updateSchool({ shifts })
+    if (lastLesson > school.maxLessonsPerDay) setMaxLessonsPerDay(lastLesson)
     setTab(newIdx - 1)
     toast.success(`${newIdx}-navbat qo'shildi`)
   }
@@ -97,9 +115,9 @@ export function SchoolPage() {
       toast.error("Kamida 1 ta navbat bo'lishi kerak")
       return
     }
-    const shifts = school.shifts.filter((_, i) => i !== idx).map((s, i) => ({ ...s, index: i + 1 }))
-    updateSchool({ shifts })
-    if (tab >= shifts.length) setTab(shifts.length - 1)
+    removeShiftAt(idx)
+    const remaining = school.shifts.length - 1
+    if (tab >= remaining) setTab(remaining - 1)
     toast.success(`${idx + 1}-navbat o'chirildi`)
   }
 
@@ -176,17 +194,19 @@ export function SchoolPage() {
               <TextField value={school.academicYear} onChange={(e) => updateSchool({ academicYear: e.target.value })} />
             </Field>
             <Field label="O'quv kunlari (hafta)">
-              <SelectField value={school.workDays} onChange={(e) => updateSchool({ workDays: +e.target.value })}>
+              <SelectField value={school.workDays} onChange={(e) => setWorkDays(+e.target.value)}>
                 <option value={5}>5 kunlik</option>
                 <option value={6}>6 kunlik</option>
               </SelectField>
             </Field>
             <Field label="Kuniga maks. dars" hint="Jadval va ish vaqti kataklari soni">
               <NumberField
-                value={school.maxLessonsPerDay}
+                value={maxDraft}
                 min={4}
-                max={16}
-                onChange={(e) => setMaxLessonsPerDay(Math.min(16, Math.max(1, +e.target.value || 1)))}
+                max={MAX_LESSONS}
+                onChange={(e) => setMaxDraft(e.target.value)}
+                onBlur={commitMax}
+                onKeyDown={(e) => e.key === 'Enter' && commitMax()}
               />
             </Field>
             <Field label="Direktor">

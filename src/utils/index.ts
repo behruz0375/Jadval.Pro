@@ -1,5 +1,10 @@
 import type { WeekType } from '@/types'
 
+/** CSS rangini xavfsiz qiymatga keltiradi (faqat #rgb/#rrggbb...): .jadval yoki bulut nusxasidagi begona matn HTML/CSS ichiga tushib qolmasin */
+export function safeColor(c: string | undefined | null, fallback = '#999'): string {
+  return typeof c === 'string' && /^#[0-9a-f]{3,8}$/i.test(c.trim()) ? c.trim() : fallback
+}
+
 /** Classname birlashtiruvchi */
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ')

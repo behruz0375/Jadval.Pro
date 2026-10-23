@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { FileSpreadsheet, Download, Upload, Check, Wand2, Eye, EyeOff } from 'lucide-react'
 import { Modal } from '@/components/Modal'
 import { useProject } from '@/store/project'
 import { useToast } from '@/store/toast'
+import { createBackup } from '@/io/backup'
 import {
   readSheets,
   autoDetect,
@@ -32,6 +33,8 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [showRaw, setShowRaw] = useState(false)
+  const [replace, setReplace] = useState(true)
+  const [importing, setImporting] = useState(false)
 
   const reset = () => {
     setStep('ask')
@@ -41,7 +44,14 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
     setMapping(null)
     setParsed(null)
     setError(null)
+    setReplace(true)
   }
+
+  // Import nima qilishini oldindan hisoblaymiz (applyImport sof funksiya — loyihaga tegmaydi)
+  const plan = useMemo(
+    () => (parsed && parsed.rows.length > 0 ? applyImport(parsed, project, { replace }).summary : null),
+    [parsed, project, replace],
+  )
 
   const close = () => {
     reset()
@@ -53,6 +63,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
 
   const applyMapping = (shIdx: number, m: Mapping) => {
     const r = sheets[shIdx]?.rows ?? []
+    setError(null)
     setMapping(m)
     setParsed(buildParsed(r, m))
   }
@@ -102,27 +113,54 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
     applyMapping(sheetIdx, m)
   }
 
-  const doImport = () => {
-    if (!parsed) return
+  const doImport = async () => {
+    if (!parsed || importing) return
+    const noLessonsMsg =
+      "Hech qanday dars topilmadi — pastdagi \"Sinf ustunlari\" bo'limida sinflarni qo'lda belgilang yoki \"Fayl mazmuni\" ni ko'rib ustunlarni to'g'rilang"
     if (parsed.rows.length === 0) {
-      setError("Hech qanday dars topilmadi — pastdagi \"Sinf ustunlari\" bo'limida sinflarni qo'lda belgilang yoki \"Fayl mazmuni\" ni ko'rib ustunlarni to'g'rilang")
+      setError(noLessonsMsg)
       setShowRaw(true)
       return
     }
-    const { project: next, summary } = applyImport(parsed, project)
-    setProject(next)
-    const parts: string[] = []
-    if (summary.classes > 0) parts.push(`+${summary.classes} sinf`)
-    if (summary.subjects > 0) parts.push(`+${summary.subjects} fan`)
-    if (summary.teachers > 0) parts.push(`+${summary.teachers} o'qituvchi`)
-    if (summary.lessons > 0) parts.push(`+${summary.lessons} yangi dars`)
-    if (summary.updated > 0) parts.push(`${summary.updated} dars yangilandi`)
-    if (parts.length === 0) {
-      toast.info(`Hamma ma'lumot allaqachon mavjud (${summary.hours} soat tekshirildi) — hech narsa o'zgarmadi`)
-    } else {
-      toast.success('Import: ' + parts.join(', '))
+    const { project: next, summary } = applyImport(parsed, project, { replace })
+    // Sinf ustunlari noma'qul bo'lsa (masalan "№", "Xona") — hech narsa qo'llanmaydi: muvaffaqiyat deb aldamaymiz
+    if (summary.lessons + summary.updated + summary.unchanged === 0) {
+      setError(noLessonsMsg)
+      setShowRaw(true)
+      return
     }
-    close()
+    setImporting(true)
+    try {
+      // Eski darslar o'chiriladigan bo'lsa — avval zaxira nusxa (Zaxira nusxalar bo'limidan tiklash mumkin)
+      if (summary.removed > 0) {
+        try {
+          await createBackup(project, 'Taqsimot import qilishdan oldin')
+        } catch {
+          /* zaxira yozilmasa ham import to'xtamaydi */
+        }
+      }
+      setProject(next)
+      const parts: string[] = []
+      if (summary.classes > 0) parts.push(`+${summary.classes} sinf`)
+      if (summary.subjects > 0) parts.push(`+${summary.subjects} fan`)
+      if (summary.teachers > 0) parts.push(`+${summary.teachers} o'qituvchi`)
+      if (summary.lessons > 0) parts.push(`+${summary.lessons} yangi dars`)
+      if (summary.updated > 0) parts.push(`${summary.updated} dars yangilandi`)
+      if (summary.removed > 0) parts.push(`${summary.removed} eski dars olib tashlandi`)
+      const lessonCount = summary.lessons + summary.updated + summary.unchanged
+      if (parts.length === 0) {
+        toast.success(`Taqsimot qo'llandi: ${lessonCount} dars, ${summary.hours} soat — avvalgisi bilan bir xil`)
+      } else {
+        const hint =
+          (summary.updated > 0 || summary.removed > 0) && project.timetables.length > 0
+            ? " — jadvalni qayta tuzing"
+            : ''
+        toast.success('Taqsimot qo\'llandi: ' + parts.join(', ') + hint)
+      }
+      close()
+    } finally {
+      setImporting(false)
+    }
   }
 
   const colOptions = header.map((h, i) => ({ i, label: `${colLetter(i)} — ${h || '(bo‘sh)'}` }))
@@ -137,16 +175,18 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
     <Modal
       open={open}
       title="Dars taqsimotini import qilish"
-      onClose={close}
+      onClose={() => {
+        if (!importing) close()
+      }}
       width={step === 'preview' ? 'max-w-4xl' : 'max-w-md'}
       footer={
         step === 'preview' ? (
           <>
             {error && <span className="mr-auto text-sm text-danger">{error}</span>}
-            <button onClick={() => setStep('ask')} className="btn btn-outline">
+            <button onClick={() => setStep('ask')} disabled={importing} className="btn btn-outline disabled:opacity-50">
               Orqaga
             </button>
-            <button onClick={doImport} className="btn btn-accent">
+            <button onClick={doImport} disabled={importing} className="btn btn-accent disabled:opacity-50">
               <Check size={16} /> Import qilish
             </button>
           </>
@@ -361,6 +401,45 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
               <span className="chip">
                 {parsed.rows.reduce((a, r) => a + Object.values(r.hours).reduce((x, y) => x + y, 0), 0)} soat
               </span>
+            </div>
+          )}
+
+          {/* Taqsimotni qo'llash rejimi + nima o'zgarishi */}
+          {plan && plan.lessons + plan.updated + plan.unchanged > 0 && (
+            <div className="rounded-lg border border-border bg-surface-2 p-2 text-xs">
+              <label className="flex cursor-pointer items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={replace}
+                  onChange={(e) => setReplace(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  <b>Shu taqsimotni asos qilish</b> — fayldagi sinflar uchun avvalgi darslar almashtiriladi
+                  (fayldan tashqari eski darslar olib tashlanadi). O'chirib qo'ysangiz — faqat qo'shiladi va yangilanadi.
+                </span>
+              </label>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {plan.lessons > 0 && <span className="chip text-ok">+{plan.lessons} yangi dars</span>}
+                {plan.updated > 0 && <span className="chip">{plan.updated} dars yangilanadi</span>}
+                {plan.unchanged > 0 && <span className="chip text-muted">{plan.unchanged} dars o'zgarishsiz</span>}
+                {plan.removed > 0 && <span className="chip text-danger">{plan.removed} eski dars olib tashlanadi</span>}
+              </div>
+              {plan.removed > 0 && (
+                <details className="mt-1.5">
+                  <summary className="cursor-pointer text-danger">Qaysi darslar olib tashlanadi?</summary>
+                  <ul className="mt-1 max-h-28 overflow-auto pl-4">
+                    {plan.removedLabels.slice(0, 40).map((l, i) => (
+                      <li key={i} className="list-disc text-muted">
+                        {l}
+                      </li>
+                    ))}
+                    {plan.removedLabels.length > 40 && (
+                      <li className="list-none text-muted">… va yana {plan.removedLabels.length - 40} ta</li>
+                    )}
+                  </ul>
+                </details>
+              )}
             </div>
           )}
 
